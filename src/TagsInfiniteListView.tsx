@@ -1,0 +1,980 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { 
+  Radio, 
+  Search, 
+  Trash2, 
+  Copy, 
+  Check, 
+  Tag, 
+  Globe, 
+  Type, 
+  FileCode, 
+  Edit3, 
+  Clock, 
+  ChevronDown, 
+  ChevronUp, 
+  Sparkles, 
+  ShieldCheck, 
+  HardDrive, 
+  Cpu, 
+  Loader2, 
+  AlertTriangle, 
+  XCircle,
+  X,
+  Plus,
+  PenTool,
+  Save,
+  Lock,
+  Unlock
+} from 'lucide-react';
+import { NFCTagItem, EditableNDEFRecord } from './types';
+import { 
+  analyzeNTAGCapacity, 
+  getTagTypeHint, 
+  formatNDEFPayloadForNFC, 
+  normalizeUid, 
+  parseRawNDEFToEditable 
+} from './store';
+import { useToast } from './toast';
+import { renderControlCharContent, ControlCharViewer, analyzeControlChars } from './ControlCharViewer';
+import { Modal } from './Modal';
+import { TagCardItem } from './TagCardItem';
+
+interface TagsInfiniteListViewProps {
+  store: any;
+}
+
+const PAGE_SIZE = 25; // Chunk size for progressive lazy rendering
+
+export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
+  const { 
+    tags, 
+    updateTagName, 
+    deleteTag, 
+    upsertTag, 
+    addLog, 
+    seedMockTags,
+    searchQuery,
+    setSearchQuery,
+    openSearchModal,
+    recordFilter,
+    setRecordFilter,
+    isScanning,
+    startScanning: storeStartScanning,
+    stopScanning
+  } = store;
+  const { showSuccess, showWarning, showInfo, showNFCError } = useToast();
+  const isWebNFCSupported = typeof window !== 'undefined' && 'NDEFReader' in window;
+
+  const [copiedUid, setCopiedUid] = useState<string | null>(null);
+  
+  // Inline name editing state
+  const [editingNameUid, setEditingNameUid] = useState<string | null>(null);
+  const [tempName, setTempName] = useState<string>('');
+
+  // Per-Tag Safe Erase Modal State (UID Locked Erase)
+  const [safeEraseTarget, setSafeEraseTarget] = useState<NFCTagItem | null>(null);
+  const [isErasingActive, setIsErasingActive] = useState<boolean>(false);
+  const [eraseStatusMessage, setEraseStatusMessage] = useState<string | null>(null);
+  const [eraseErrorWarning, setEraseErrorWarning] = useState<string | null>(null);
+  const eraseAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Per-Tag Safe Write / Edit Modal State (UID Locked Write)
+  const [safeWriteTarget, setSafeWriteTarget] = useState<NFCTagItem | null>(null);
+  const [editRecords, setEditRecords] = useState<EditableNDEFRecord[]>([]);
+  const [isWritingActive, setIsWritingActive] = useState<boolean>(false);
+  const [writeStatusMessage, setWriteStatusMessage] = useState<string | null>(null);
+  const [writeErrorWarning, setWriteErrorWarning] = useState<string | null>(null);
+  const writeAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Lazy loading / Pagination for infinite scrolling
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const lastScrollTopRef = useRef<number>(0);
+
+  // Auto-hide top header on mobile when scrolling down, restore when scrolling up
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const currentScrollTop = e.currentTarget.scrollTop;
+    const diff = currentScrollTop - lastScrollTopRef.current;
+
+    // Detect direction with threshold to avoid minor touch bounce
+    if (Math.abs(diff) > 6) {
+      if (currentScrollTop > 30 && diff > 0) {
+        // User scrolling down: hide header on mobile to maximize card list scroll area
+        if (store.isHeaderVisible) {
+          store.setIsHeaderVisible(false);
+        }
+      } else if (diff < 0 || currentScrollTop <= 10) {
+        // User scrolling up or near top: show header
+        if (!store.isHeaderVisible) {
+          store.setIsHeaderVisible(true);
+        }
+      }
+      lastScrollTopRef.current = currentScrollTop;
+    }
+  }, [store.isHeaderVisible, store.setIsHeaderVisible]);
+
+  // Trigger global scan with toasts
+  const handleStartScanning = () => {
+    storeStartScanning({
+      onSuccess: showSuccess,
+      onWarning: showWarning,
+      onInfo: showInfo,
+      onError: (err: any) => showNFCError(err, 'read')
+    });
+  };
+
+  // ----------------------------------------------------
+  // Per-Tag Safe Erase (Target UID Locked) Handler
+  // ----------------------------------------------------
+  const stopSafeErase = useCallback(() => {
+    if (eraseAbortControllerRef.current) {
+      eraseAbortControllerRef.current.abort();
+      eraseAbortControllerRef.current = null;
+    }
+    setIsErasingActive(false);
+    setEraseStatusMessage(null);
+  }, []);
+
+  const openSafeEraseModal = (tag: NFCTagItem) => {
+    stopScanning();
+    stopSafeWrite();
+    stopSafeErase();
+    setSafeEraseTarget(tag);
+    setEraseErrorWarning(null);
+    setEraseStatusMessage(null);
+  };
+
+  const closeSafeEraseModal = () => {
+    stopSafeErase();
+    setSafeEraseTarget(null);
+    setEraseErrorWarning(null);
+    setEraseStatusMessage(null);
+  };
+
+  const executeSafeErase = async () => {
+    if (!safeEraseTarget) return;
+
+    if (!isWebNFCSupported) {
+      showNFCError(new DOMException('Web NFC is not supported in this browser.', 'NotSupportedError'), 'erase');
+      return;
+    }
+
+    stopSafeErase();
+    setIsErasingActive(true);
+    setEraseErrorWarning(null);
+    setEraseStatusMessage(`デバイスに対象タグ (UID: ${safeEraseTarget.uid}) をかざしてください...`);
+
+    const targetNormalized = normalizeUid(safeEraseTarget.uid);
+
+    try {
+      eraseAbortControllerRef.current = new AbortController();
+      const signal = eraseAbortControllerRef.current.signal;
+      const ndef = new (window as any).NDEFReader();
+
+      // Step 1: Scan first to verify UID before issuing any write
+      await ndef.scan({ signal });
+
+      ndef.onreading = async (event: any) => {
+        const scannedSerial = event.serialNumber;
+        const scannedNormalized = normalizeUid(scannedSerial);
+
+        if (!scannedSerial || scannedNormalized !== targetNormalized) {
+          // UID MISMATCH - ABORT ERASE IMMEDIATELY & PROTECT DATA!
+          stopSafeErase();
+          const errorMsg = `❌ 消去ブロック: かざされたタグのUID [${scannedSerial || '不明'}] が対象 [${safeEraseTarget.uid}] と一致しません。消去は中断されデータは保護されました。`;
+          setEraseErrorWarning(errorMsg);
+
+          addLog({
+            action: 'erase',
+            serialNumber: scannedSerial || 'Unknown',
+            messageSummary: `Erase Blocked: UID Mismatch (expected: ${safeEraseTarget.uid}, scanned: ${scannedSerial})`,
+            rawRecords: []
+          });
+
+          showWarning('消去ブロック (UID不一致)', `対象: ${safeEraseTarget.uid} / 検出: ${scannedSerial || '不明'}`);
+          return;
+        }
+
+        // UID MATCHED - Proceed with Safe Erase (Write Empty NDEF)
+        try {
+          setEraseStatusMessage(`UID確認完了 (${scannedSerial})。タグを初期化中...`);
+
+          await ndef.write({ records: [{ recordType: 'empty' }] }, { signal });
+
+          // Update store
+          upsertTag({
+            uid: scannedSerial,
+            records: [],
+            hasNdef: false,
+            action: 'erase'
+          });
+
+          addLog({
+            action: 'erase',
+            serialNumber: scannedSerial,
+            messageSummary: `Tag Cleared / Erased successfully (UID: ${scannedSerial})`,
+            rawRecords: []
+          });
+
+          showSuccess('タグ初期化完了', `UID [${scannedSerial}] の全データを正常に消去しました。`);
+          closeSafeEraseModal();
+        } catch (writeErr: any) {
+          setEraseErrorWarning(`消去処理エラー: ${writeErr.message}`);
+          showNFCError(writeErr, 'erase');
+          stopSafeErase();
+        }
+      };
+
+      ndef.onreadingerror = (errEvent: any) => {
+        const eventSerial = errEvent?.serialNumber;
+        if (eventSerial && normalizeUid(eventSerial) !== targetNormalized) {
+          stopSafeErase();
+          const errorMsg = `❌ 消去ブロック: かざされたタグのUID [${eventSerial}] が対象 [${safeEraseTarget.uid}] と一致しません。`;
+          setEraseErrorWarning(errorMsg);
+          showWarning('消去ブロック (UID不一致)', errorMsg);
+        } else {
+          setEraseErrorWarning('タグ読み取りエラーが発生しました。タグを静止させて再度かざしてください。');
+          showNFCError(new DOMException('Tag was removed too quickly during UID verification', 'NetworkError'), 'erase');
+          stopSafeErase();
+        }
+      };
+
+    } catch (err: any) {
+      setEraseErrorWarning(`スキャン開始失敗: ${err.message}`);
+      showNFCError(err, 'erase');
+      setIsErasingActive(false);
+    }
+  };
+
+  // ----------------------------------------------------
+  // Per-Tag Safe Write (Target UID Locked) Handler
+  // ----------------------------------------------------
+  const stopSafeWrite = useCallback(() => {
+    if (writeAbortControllerRef.current) {
+      writeAbortControllerRef.current.abort();
+      writeAbortControllerRef.current = null;
+    }
+    setIsWritingActive(false);
+    setWriteStatusMessage(null);
+  }, []);
+
+  const openSafeWriteModal = (tag: NFCTagItem) => {
+    stopScanning();
+    stopSafeErase();
+    stopSafeWrite();
+    setSafeWriteTarget(tag);
+    // Deep clone records for editing
+    if (tag.records && tag.records.length > 0) {
+      setEditRecords(JSON.parse(JSON.stringify(tag.records)));
+    } else {
+      setEditRecords([{
+        id: `rec-${Date.now()}`,
+        recordType: 'text',
+        data: 'Hello NFC!',
+        lang: 'ja'
+      }]);
+    }
+    setWriteErrorWarning(null);
+    setWriteStatusMessage(null);
+  };
+
+  const closeSafeWriteModal = () => {
+    stopSafeWrite();
+    setSafeWriteTarget(null);
+    setWriteErrorWarning(null);
+    setWriteStatusMessage(null);
+  };
+
+  const handleAddRecord = () => {
+    setEditRecords(prev => [
+      ...prev,
+      {
+        id: `rec-${Date.now()}-${prev.length}`,
+        recordType: 'text',
+        data: '',
+        lang: 'ja'
+      }
+    ]);
+  };
+
+  const handleRemoveRecord = (id: string) => {
+    setEditRecords(prev => prev.filter(r => r.id !== id));
+  };
+
+  const handleUpdateRecord = (id: string, updates: Partial<EditableNDEFRecord>) => {
+    setEditRecords(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+  };
+
+  const executeSafeWrite = async () => {
+    if (!safeWriteTarget) return;
+
+    if (!isWebNFCSupported) {
+      showNFCError(new DOMException('Web NFC is not supported in this browser.', 'NotSupportedError'), 'write');
+      return;
+    }
+
+    if (editRecords.length === 0) {
+      showWarning('レコードなし', '少なくとも1つのレコードを追加してください。');
+      return;
+    }
+
+    stopSafeWrite();
+    setIsWritingActive(true);
+    setWriteErrorWarning(null);
+    setWriteStatusMessage(`対象タグ (UID: ${safeWriteTarget.uid}) をデバイスにかざしてください...`);
+
+    const targetNormalized = normalizeUid(safeWriteTarget.uid);
+    const nfcPayload = formatNDEFPayloadForNFC(editRecords);
+
+    try {
+      writeAbortControllerRef.current = new AbortController();
+      const signal = writeAbortControllerRef.current.signal;
+      const ndef = new (window as any).NDEFReader();
+
+      // Step 1: Scan first to verify UID before writing
+      await ndef.scan({ signal });
+
+      ndef.onreading = async (event: any) => {
+        const scannedSerial = event.serialNumber;
+        const scannedNormalized = normalizeUid(scannedSerial);
+
+        if (!scannedSerial || scannedNormalized !== targetNormalized) {
+          // UID MISMATCH - ABORT WRITE IMMEDIATELY & PROTECT DATA!
+          stopSafeWrite();
+          const errorMsg = `❌ 書込ブロック: かざされたタグのUID [${scannedSerial || '不明'}] が対象 [${safeWriteTarget.uid}] と一致しません。書き込みは中断され保護されました。`;
+          setWriteErrorWarning(errorMsg);
+
+          addLog({
+            action: 'write',
+            serialNumber: scannedSerial || 'Unknown',
+            messageSummary: `Write Blocked: UID Mismatch (expected: ${safeWriteTarget.uid}, scanned: ${scannedSerial})`,
+            rawRecords: []
+          });
+
+          showWarning('書込ブロック (UID不一致)', `対象: ${safeWriteTarget.uid} / 検出: ${scannedSerial || '不明'}`);
+          return;
+        }
+
+        // UID MATCHED - Proceed with Safe Write
+        try {
+          setWriteStatusMessage(`UID確認完了 (${scannedSerial})。タグに書き込み中...`);
+
+          await ndef.write(nfcPayload, { signal });
+
+          // Update store
+          upsertTag({
+            uid: scannedSerial,
+            records: editRecords,
+            hasNdef: true,
+            action: 'write'
+          });
+
+          addLog({
+            action: 'write',
+            serialNumber: scannedSerial,
+            messageSummary: `Wrote ${editRecords.length} record(s) to UID: ${scannedSerial}`,
+            rawRecords: editRecords
+          });
+
+          showSuccess('タグ書き込み完了', `UID [${scannedSerial}] に ${editRecords.length} 件のレコードを書き込みました。`);
+          closeSafeWriteModal();
+        } catch (writeErr: any) {
+          setWriteErrorWarning(`書き込みエラー: ${writeErr.message}`);
+          showNFCError(writeErr, 'write');
+          stopSafeWrite();
+        }
+      };
+
+      ndef.onreadingerror = (errEvent: any) => {
+        const eventSerial = errEvent?.serialNumber;
+        if (eventSerial && normalizeUid(eventSerial) !== targetNormalized) {
+          stopSafeWrite();
+          const errorMsg = `❌ 書込ブロック: かざされたタグのUID [${eventSerial}] が対象 [${safeWriteTarget.uid}] と一致しません。`;
+          setWriteErrorWarning(errorMsg);
+          showWarning('書込ブロック (UID不一致)', errorMsg);
+        } else {
+          setWriteErrorWarning('タグ読み取りエラーが発生しました。タグを静止させて再度かざしてください。');
+          showNFCError(new DOMException('Tag was removed too quickly during UID verification', 'NetworkError'), 'write');
+          stopSafeWrite();
+        }
+      };
+
+    } catch (err: any) {
+      setWriteErrorWarning(`スキャン開始失敗: ${err.message}`);
+      showNFCError(err, 'write');
+      setIsWritingActive(false);
+    }
+  };
+
+  // Cleanup active scan/erase/write controllers on unmount
+  useEffect(() => {
+    return () => {
+      stopScanning();
+      stopSafeErase();
+      stopSafeWrite();
+    };
+  }, [stopScanning, stopSafeErase, stopSafeWrite]);
+
+  // ----------------------------------------------------
+  // Filtering & Pagination
+  // ----------------------------------------------------
+  const filteredTags = useMemo(() => {
+    let result = tags as NFCTagItem[];
+
+    if (recordFilter === 'multi') {
+      result = result.filter(t => t.records && t.records.length > 1);
+    } else if (recordFilter === 'single') {
+      result = result.filter(t => t.records && t.records.length === 1);
+    } else if (recordFilter === 'empty') {
+      result = result.filter(t => !t.records || t.records.length === 0 || !t.hasNdef);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter(t => {
+        if (t.uid.toLowerCase().includes(q)) return true;
+        if (t.name && t.name.toLowerCase().includes(q)) return true;
+        if (t.notes && t.notes.toLowerCase().includes(q)) return true;
+        if (t.tagType && t.tagType.toLowerCase().includes(q)) return true;
+        if (t.records && t.records.some(r => r.data && r.data.toLowerCase().includes(q))) return true;
+        return false;
+      });
+    }
+
+    return [...result].sort((a, b) => b.lastRead - a.lastRead);
+  }, [tags, recordFilter, searchQuery]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [searchQuery, recordFilter]);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting) {
+          setVisibleCount(prev => {
+            if (prev < filteredTags.length) {
+              return Math.min(prev + PAGE_SIZE, filteredTags.length);
+            }
+            return prev;
+          });
+        }
+      },
+      {
+        root: scrollContainerRef.current,
+        rootMargin: '400px',
+        threshold: 0.1
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [filteredTags.length]);
+
+  const currentlyRenderedTags = useMemo(() => {
+    return filteredTags.slice(0, visibleCount);
+  }, [filteredTags, visibleCount]);
+
+  const handleCopyUid = (uid: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    navigator.clipboard.writeText(uid).then(() => {
+      setCopiedUid(uid);
+      showInfo('UID Copied', uid);
+      setTimeout(() => setCopiedUid(null), 1800);
+    }).catch(() => {});
+  };
+
+  const handleStartEditName = (tag: NFCTagItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingNameUid(tag.uid);
+    setTempName(tag.name || '');
+  };
+
+  const handleSaveName = (uid: string) => {
+    updateTagName(uid, tempName.trim());
+    setEditingNameUid(null);
+  };
+
+  const writeCapacity = useMemo(() => {
+    return analyzeNTAGCapacity(editRecords);
+  }, [editRecords]);
+
+  // Filter counts for segmented filter chips
+  const totalCount = tags.length;
+  const multiCount = useMemo(() => tags.filter((t: NFCTagItem) => t.records && t.records.length > 1).length, [tags]);
+  const singleCount = useMemo(() => tags.filter((t: NFCTagItem) => t.records && t.records.length === 1).length, [tags]);
+  const emptyCount = useMemo(() => tags.filter((t: NFCTagItem) => !t.records || t.records.length === 0 || !t.hasNdef).length, [tags]);
+
+  const isFilteringActive = searchQuery.trim().length > 0 || recordFilter !== 'all';
+
+  return (
+    <div className="flex flex-col h-full bg-[#0F172A] rounded-none border-0 overflow-hidden shadow-none w-full">
+      
+      {/* Active Scan Indicator Banner */}
+      {isScanning && (
+        <div className="p-2 sm:p-3 border-b border-blue-500/30 bg-blue-950/80 flex-shrink-0 animate-fade-in">
+          <div className="flex items-center justify-between px-3.5 py-2 bg-blue-900/50 border border-blue-500/50 rounded-xl text-xs text-blue-200 font-medium shadow-sm">
+            <div className="flex items-center gap-2 min-w-0">
+              <Loader2 className="w-4 h-4 animate-spin text-cyan-400 flex-shrink-0" />
+              <span className="truncate">NFCスキャン待機中: デバイスのリーダー部にタグをかざしてください</span>
+            </div>
+            <button
+              type="button"
+              onClick={stopScanning}
+              className="flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer flex-shrink-0 ml-2"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              <span>停止</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Unified, Modern Search & Filter Bar (Single source of filtering) */}
+      <div className="p-2.5 sm:p-3.5 border-b border-slate-800 bg-slate-900/90 flex-shrink-0 space-y-2">
+        {/* Search Input */}
+        <div className="relative w-full">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="タグ名、UID、NDEFデータで検索..."
+            className="w-full bg-[#0B1120] border border-slate-700/80 rounded-xl pl-9 pr-9 py-2 text-xs sm:text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
+              title="検索ワードをクリア"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Filter Chips / Categories */}
+        <div className="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar py-0.5">
+          <div className="flex items-center gap-1.5 flex-nowrap">
+            <button
+              type="button"
+              onClick={() => setRecordFilter('all')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer border ${
+                recordFilter === 'all'
+                  ? 'bg-blue-600/25 text-cyan-300 border-blue-500/50 shadow-sm font-semibold'
+                  : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700/70 hover:bg-slate-700/60'
+              }`}
+            >
+              すべて <span className="font-mono text-[10px] ml-0.5 opacity-80">({totalCount})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRecordFilter('single')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer border ${
+                recordFilter === 'single'
+                  ? 'bg-indigo-600/25 text-indigo-300 border-indigo-500/50 shadow-sm font-semibold'
+                  : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700/70 hover:bg-slate-700/60'
+              }`}
+            >
+              単一レコード <span className="font-mono text-[10px] ml-0.5 opacity-80">({singleCount})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRecordFilter('multi')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer border ${
+                recordFilter === 'multi'
+                  ? 'bg-cyan-600/25 text-cyan-300 border-cyan-500/50 shadow-sm font-semibold'
+                  : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700/70 hover:bg-slate-700/60'
+              }`}
+            >
+              複数レコード <span className="font-mono text-[10px] ml-0.5 opacity-80">({multiCount})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRecordFilter('empty')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer border ${
+                recordFilter === 'empty'
+                  ? 'bg-amber-600/25 text-amber-300 border-amber-500/50 shadow-sm font-semibold'
+                  : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700/70 hover:bg-slate-700/60'
+              }`}
+            >
+              空 / IDのみ <span className="font-mono text-[10px] ml-0.5 opacity-80">({emptyCount})</span>
+            </button>
+          </div>
+
+          {/* Reset button when filter or search is active */}
+          {isFilteringActive && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setRecordFilter('all');
+              }}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white bg-slate-800/90 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors whitespace-nowrap cursor-pointer ml-1 flex-shrink-0"
+              title="検索と絞り込みをリセット"
+            >
+              <X className="w-3 h-3" />
+              <span>リセット</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Infinite Scroll Container - Edge-to-edge on mobile with onScroll direction listener */}
+      <div 
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-5 space-y-2.5 sm:space-y-3.5 will-change-scroll"
+      >
+        {filteredTags.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-slate-500 py-16 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mb-3">
+              <Radio className="w-7 h-7 text-slate-500 opacity-60" />
+            </div>
+            <p className="text-sm font-semibold text-slate-300">No NFC tag cards found</p>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm leading-relaxed">
+              {searchQuery 
+                ? 'No tags matching your search query. Try clearing the search term.'
+                : 'Tap "Scan NFC Tag" above and hold a tag near your phone to automatically register its card here.'}
+            </p>
+            {tags.length === 0 && (
+              <button
+                type="button"
+                onClick={() => seedMockTags(20)}
+                className="mt-4 flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-md transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Load Sample Tags (20 cards)</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Tag Cards Vertically Stacked with Mobile Swipe & Desktop See-Through (透視) */}
+            {currentlyRenderedTags.map((tag: NFCTagItem) => (
+              <TagCardItem
+                key={tag.uid}
+                tag={tag}
+                copiedUid={copiedUid}
+                onCopyUid={handleCopyUid}
+                editingNameUid={editingNameUid}
+                tempName={tempName}
+                onSetTempName={setTempName}
+                onStartEditName={handleStartEditName}
+                onSaveName={handleSaveName}
+                onOpenSafeWrite={openSafeWriteModal}
+                onOpenSafeErase={openSafeEraseModal}
+                onDeleteTag={deleteTag}
+                onShowInfo={showInfo}
+              />
+            ))}
+
+            {/* Lazy Load Sentinel Trigger */}
+            <div ref={sentinelRef} className="py-4 flex items-center justify-center">
+              {visibleCount < filteredTags.length ? (
+                <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/80 px-4 py-2 rounded-full border border-slate-700">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-ping"></div>
+                  <span>Loading more tags ({visibleCount} of {filteredTags.length} shown)...</span>
+                </div>
+              ) : (
+                <div className="text-[11px] text-slate-500 font-mono">
+                  — End of tag registry ({filteredTags.length} total) —
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ---------------------------------------------------- */}
+      {/* SAFE WRITE MODAL (UID PRE-VERIFICATION SECURITY LOCK) */}
+      {/* ---------------------------------------------------- */}
+      {safeWriteTarget && (
+        <Modal
+          isOpen={true}
+          onClose={closeSafeWriteModal}
+          title="NFCタグ書き込み・編集 (Safe Write)"
+        >
+          <div className="p-3 sm:p-4 space-y-4">
+            
+            {/* Target UID Lock Info Banner */}
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  対象タグ (UIDロック確認中)
+                </span>
+                <span className="px-2 py-0.5 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 rounded text-[10px] font-mono font-bold">
+                  UID LOCKED
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="text-cyan-300 font-bold select-all">{safeWriteTarget.uid}</span>
+                {safeWriteTarget.name && <span className="text-slate-300 font-sans">{safeWriteTarget.name}</span>}
+              </div>
+              <p className="text-[11px] text-emerald-300 bg-emerald-950/40 p-2 rounded-lg border border-emerald-500/20 leading-relaxed">
+                🔒 <b>誤書き込み防止:</b> かざされたタグのUIDを事前検証し、<b>{safeWriteTarget.uid}</b> のみ書き込みます。別のタグがかざされた場合は自動的に中断されます。
+              </p>
+            </div>
+
+            {/* Record Editor List */}
+            <div className="space-y-3 max-h-[45vh] overflow-y-auto pr-1">
+              <div className="flex items-center justify-between">
+                <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  NDEF レコード編集 ({editRecords.length})
+                </h5>
+                <button
+                  type="button"
+                  onClick={handleAddRecord}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>レコード追加</span>
+                </button>
+              </div>
+
+              {editRecords.map((rec, idx) => (
+                <div key={rec.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono font-bold text-cyan-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700">
+                        #{idx + 1}
+                      </span>
+                      <select
+                        value={rec.recordType}
+                        onChange={e => handleUpdateRecord(rec.id, { recordType: e.target.value as any })}
+                        className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none"
+                      >
+                        <option value="text">Text (テキスト)</option>
+                        <option value="url">URL (リンク)</option>
+                        <option value="mime">MIME / JSON</option>
+                      </select>
+                    </div>
+
+                    {rec.recordType === 'text' && (
+                      <input
+                        type="text"
+                        value={rec.lang || 'ja'}
+                        onChange={e => handleUpdateRecord(rec.id, { lang: e.target.value })}
+                        placeholder="lang"
+                        className="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-center font-mono text-slate-300"
+                        title="Language code (e.g. ja, en)"
+                      />
+                    )}
+
+                    {rec.recordType === 'mime' && (
+                      <input
+                        type="text"
+                        value={rec.mediaType || 'application/json'}
+                        onChange={e => handleUpdateRecord(rec.id, { mediaType: e.target.value })}
+                        placeholder="mime/type"
+                        className="w-32 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-xs font-mono text-slate-300"
+                      />
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveRecord(rec.id)}
+                      disabled={editRecords.length <= 1}
+                      className="p-1 text-slate-500 hover:text-red-400 disabled:opacity-30 transition-colors"
+                      title="Delete this record"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <textarea
+                    value={rec.data}
+                    onChange={e => handleUpdateRecord(rec.id, { data: e.target.value })}
+                    rows={rec.recordType === 'text' && (rec.data.includes('\n') || rec.data.length > 50) ? 3 : 2}
+                    placeholder={
+                      rec.recordType === 'url' ? 'https://example.com' :
+                      rec.recordType === 'mime' ? '{"key": "value"}' :
+                      '書き込みたいテキストを入力...'
+                    }
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 font-mono placeholder:text-slate-600 focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Capacity Stats */}
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+              <span className="text-slate-400 flex items-center gap-1">
+                <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
+                予定ペイロード: <span className="font-mono text-white font-bold">{writeCapacity.bytes} B</span>
+              </span>
+              <span className={`font-semibold ${
+                writeCapacity.badgeColor === 'emerald' ? 'text-emerald-400' :
+                writeCapacity.badgeColor === 'amber' ? 'text-amber-300' :
+                writeCapacity.badgeColor === 'blue' ? 'text-blue-300' :
+                'text-red-400'
+              }`}>
+                {writeCapacity.recommendedChip} ({writeCapacity.detailDescription})
+              </span>
+            </div>
+
+            {/* Real-time status */}
+            {isWritingActive && (
+              <div className="p-3 rounded-xl bg-blue-950/80 border border-blue-500/40 flex items-center gap-2.5 text-xs text-blue-200 animate-pulse">
+                <Loader2 className="w-4 h-4 animate-spin text-cyan-400 flex-shrink-0" />
+                <span>{writeStatusMessage || '対象タグをデバイスにかざしてください...'}</span>
+              </div>
+            )}
+
+            {/* Error banner */}
+            {writeErrorWarning && (
+              <div className="p-2.5 rounded-xl bg-red-950/80 border border-red-500/50 text-xs text-red-200 leading-relaxed">
+                {writeErrorWarning}
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={closeSafeWriteModal}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-semibold text-xs sm:text-sm transition-colors"
+              >
+                閉じる
+              </button>
+
+              {isWritingActive ? (
+                <button
+                  type="button"
+                  onClick={stopSafeWrite}
+                  className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold text-xs sm:text-sm transition-colors"
+                >
+                  待機を停止
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={executeSafeWrite}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs sm:text-sm transition-colors shadow-lg shadow-blue-950/40 flex items-center justify-center gap-1.5"
+                >
+                  <PenTool className="w-4 h-4" />
+                  <span>書込待機を開始 (Scan to Write)</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* SAFE ERASE MODAL (UID PRE-VERIFICATION SECURITY LOCK) */}
+      {/* ---------------------------------------------------- */}
+      {safeEraseTarget && (
+        <Modal
+          isOpen={true}
+          onClose={closeSafeEraseModal}
+          title="NFCタグ初期化（安全消去）"
+        >
+          <div className="p-3 sm:p-4 space-y-4 text-center">
+            <div className="w-12 h-12 mx-auto rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center">
+              <AlertTriangle className="w-7 h-7 text-red-400" />
+            </div>
+
+            <div>
+              <h4 className="text-base sm:text-lg font-bold text-white mb-1">
+                このNFCタグを初期化（消去）しますか？
+              </h4>
+              <p className="text-xs text-slate-300 leading-relaxed max-w-sm mx-auto">
+                タグ内の全NDEFレコードを消去し、空（<code className="text-cyan-300 font-mono">empty</code>）の状態にリセットします。
+              </p>
+            </div>
+
+            {/* Target UID Lock Security Card */}
+            <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-left space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  UID事前検査安全ロック (Active)
+                </span>
+                <span className="px-2 py-0.5 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 rounded text-[10px] font-mono font-bold">
+                  UID LOCKED
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-700/80 space-y-1">
+                <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                  消去対象タグ UID:
+                </div>
+                <div className="font-mono text-sm font-bold text-cyan-300 select-all">
+                  {safeEraseTarget.uid}
+                </div>
+                {safeEraseTarget.name && (
+                  <div className="text-xs text-slate-300">
+                    タグ名: <span className="font-semibold text-white">{safeEraseTarget.name}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[11px] text-emerald-300 leading-relaxed">
+                🔒 <b>誤消去防止機構:</b> 消去を実行する前にタグのUIDを読み取ります。UIDが <b>{safeEraseTarget.uid}</b> と完全一致する場合のみ消去し、<b>別のタグがかざされた場合は自動的に処理をブロック</b>してデータを保護します。
+              </div>
+
+              {/* Real-time scanning status */}
+              {isErasingActive && (
+                <div className="p-3 rounded-lg bg-blue-950/60 border border-blue-500/40 flex items-center gap-2.5 text-xs text-blue-200 animate-pulse">
+                  <Loader2 className="w-4 h-4 animate-spin text-cyan-400 flex-shrink-0" />
+                  <span>{eraseStatusMessage || '対象タグをデバイスにかざしてください...'}</span>
+                </div>
+              )}
+
+              {/* Error / Mismatch Alert Banner */}
+              {eraseErrorWarning && (
+                <div className="p-2.5 rounded-lg bg-red-950/60 border border-red-500/50 text-xs text-red-200 leading-relaxed">
+                  {eraseErrorWarning}
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2.5 w-full pt-1">
+              <button
+                type="button"
+                onClick={closeSafeEraseModal}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-semibold text-xs sm:text-sm transition-colors"
+              >
+                キャンセル
+              </button>
+
+              {isErasingActive ? (
+                <button
+                  type="button"
+                  onClick={stopSafeErase}
+                  className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold text-xs sm:text-sm transition-colors"
+                >
+                  待機を停止
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={executeSafeErase}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold text-xs sm:text-sm transition-colors shadow-lg shadow-red-950/40 flex items-center justify-center gap-1.5"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>消去待機を開始 (Scan to Erase)</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+    </div>
+  );
+}

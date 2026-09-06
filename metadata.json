@@ -1,0 +1,8 @@
+{
+  "name": "NFC Web App",
+  "description": "Read and write NFC tags (NDEF) directly from your browser. Supports PWA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
