@@ -74,7 +74,10 @@ All JSON Schemas are published under canonical URIs with CORS (`Access-Control-A
 
 ### 6. Authority Boundary: Canonical Schemas vs. Generated Artifacts
 
-- **Single Source of Truth:** The JSON Schemas in `src/data-format/canonical-schemas/*.schema.json` are the sole authority.
+- **Single Source of Truth:** The modular JSON Schemas in `src/data-format/schemas/` are the sole authoritative schema sources:
+  - `src/data-format/schemas/ndef-record.schema.json`
+  - `src/data-format/schemas/nfc-tag.schema.json`
+  - `src/data-format/schemas/nfc-tag-registry.schema.json`
 - **Derived Artifacts:**
   - `src/data-format/generated/bundles/*.bundle.json`: Compound schema documents embedding dependencies under `$defs`.
   - `src/data-format/generated/nfcweb-tag-registry.ts`: TypeScript interface declarations generated via `json-schema-to-typescript`.
@@ -92,4 +95,7 @@ npm run typecheck            # Check TypeScript types
 npm test                     # Run unit and acceptance tests (Vitest)
 npm run build                # Build client into dist/client and server into dist/server
 npm start                    # Launch hardened production server
+
+# Deployment acceptance & smoke checks:
+bun run check:deployment -- https://nfcweb.ai.studio # Smoke check a deployed instance
 ```
