@@ -268,7 +268,7 @@ export function DebugView({ store }: DebugViewProps) {
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-cyan-400" />
-              <span>Sample Data Generator & Cleaner (模擬データ管理)</span>
+              <span>Sample Data Generator & Cleaner</span>
             </h3>
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
               Generate simulated multi-record tags for testing or delete mock sample data in bulk while keeping physical tags intact.

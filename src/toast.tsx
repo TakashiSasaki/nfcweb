@@ -65,7 +65,7 @@ export function parseNFCError(
     errorMsg.includes('user gesture')
   ) {
     return {
-      title: 'NFC Permission Denied (アクセス拒否)',
+      title: 'NFC Permission Denied',
       message: 'NFC permission was denied or not granted. Please check browser and system settings, and ensure NFC is toggled ON.',
       type: 'error',
       iconType: 'shield'
@@ -80,7 +80,7 @@ export function parseNFCError(
     errorMsg.includes('ndefreader is not defined')
   ) {
     return {
-      title: 'Web NFC Not Supported (非対応環境)',
+      title: 'Web NFC Not Supported',
       message: 'Web NFC API is not available in this browser. Please use Chrome 89+ on an NFC-enabled Android device over HTTPS.',
       type: 'error',
       iconType: 'smartphone'
@@ -99,14 +99,14 @@ export function parseNFCError(
   ) {
     if (context === 'write') {
       return {
-        title: 'Tag Removed During Write (通信中断)',
+        title: 'Tag Removed During Write',
         message: 'The NFC tag was moved away before writing finished. Hold the tag firmly against your phone until confirmation appears.',
         type: 'error',
         iconType: 'signal'
       };
     }
     return {
-      title: 'Tag Removed During Scan (スキャン中断)',
+      title: 'Tag Removed During Scan',
       message: 'Tag connection was lost during read. Keep the NFC tag in contact with the back of the device for 1-2 seconds.',
       type: 'warning',
       iconType: 'signal'
@@ -121,7 +121,7 @@ export function parseNFCError(
     errorMsg.includes('write-protected')
   ) {
     return {
-      title: 'Write Failed: Tag is Read-Only (ロック済み)',
+      title: 'Tag is Read-Only',
       message: 'This NFC tag is permanently locked or write-protected and cannot be overwritten.',
       type: 'error',
       iconType: 'lock'
@@ -137,7 +137,7 @@ export function parseNFCError(
     errorMsg.includes('quota')
   ) {
     return {
-      title: 'Tag Memory Full (容量不足)',
+      title: 'Tag Memory Full',
       message: 'The NDEF payload is too large to fit in this tag memory (e.g. NTAG213 144-byte limit). Reduce payload size or use an NTAG215/216.',
       type: 'error',
       iconType: 'nfc'
@@ -153,7 +153,7 @@ export function parseNFCError(
     errorMsg.includes('checksum')
   ) {
     return {
-      title: 'Tag Read Error (読取エラー)',
+      title: 'Tag Read Error',
       message: 'Detected an NFC tag, but its NDEF data could not be parsed or is unformatted.',
       type: 'warning',
       iconType: 'nfc'
@@ -163,7 +163,7 @@ export function parseNFCError(
   // 8. Invalid State
   if (errorName === 'InvalidStateError' || errorMsg.includes('busy')) {
     return {
-      title: 'NFC Reader Busy (ビジー状態)',
+      title: 'NFC Reader Busy',
       message: 'An existing NFC scan or write operation is already running. Please cancel or wait for it to finish.',
       type: 'warning',
       iconType: 'default'

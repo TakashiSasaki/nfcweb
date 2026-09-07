@@ -1,2 +1,2 @@
-export const APP_VERSION = '1.0.58';
+export const APP_VERSION = '1.0.59';
 export const APP_VERSION_TAG = `v${APP_VERSION}`;
