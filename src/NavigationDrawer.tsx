@@ -122,7 +122,7 @@ export function NavigationDrawer({
           {/* Navigation Views */}
           <div className="space-y-1">
             <div className="text-[11px] font-bold tracking-wider text-slate-400 uppercase px-3 py-1">
-              画面 (Views)
+              Views
             </div>
 
             <button
@@ -139,7 +139,7 @@ export function NavigationDrawer({
             >
               <div className="flex items-center gap-3">
                 <Layers className={`w-4 h-4 ${activeTab === 'tags' ? 'text-cyan-400' : 'text-slate-400'}`} />
-                <span>タグ一覧 (Tags List)</span>
+                <span>Tags</span>
               </div>
               <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700/60">
                 {tagsCount}
@@ -160,7 +160,7 @@ export function NavigationDrawer({
             >
               <div className="flex items-center gap-3">
                 <Bug className={`w-4 h-4 ${activeTab === 'debug' ? 'text-amber-400' : 'text-slate-400'}`} />
-                <span>デバッグログ (Debug)</span>
+                <span>Debug Log</span>
               </div>
               <span className="text-[10px] font-mono text-slate-500">#/debug</span>
             </button>
@@ -176,7 +176,7 @@ export function NavigationDrawer({
               >
                 <div className="flex items-center gap-3">
                   <Search className="w-4 h-4 text-cyan-400" />
-                  <span>タグを検索 (Search)</span>
+                  <span>Search</span>
                 </div>
               </button>
             )}
@@ -186,7 +186,7 @@ export function NavigationDrawer({
           <div className="space-y-1.5 pt-2 border-t border-slate-700/60">
             <div className="flex items-center justify-between px-3 py-1">
               <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
-                データ管理 (Data)
+                Data Management
               </span>
               <span className="text-[10px] text-emerald-400/90 font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
                 v1
@@ -207,9 +207,8 @@ export function NavigationDrawer({
                   <Download className="w-4 h-4" />
                 </div>
                 <div className="text-left min-w-0">
-                  <div className="truncate text-white font-medium flex items-center gap-1.5">
-                    <span>エクスポート</span>
-                    <span className="text-[10px] font-normal text-slate-400 font-mono">(Export)</span>
+                  <div className="truncate text-white font-medium">
+                    Export
                   </div>
                   <p className="text-[10px] text-slate-400 truncate">タグ台帳の出力 (Canonical v1 JSON)</p>
                 </div>
@@ -231,9 +230,8 @@ export function NavigationDrawer({
                   <Upload className="w-4 h-4" />
                 </div>
                 <div className="text-left min-w-0">
-                  <div className="truncate text-white font-medium flex items-center gap-1.5">
-                    <span>インポート</span>
-                    <span className="text-[10px] font-normal text-slate-400 font-mono">(Import)</span>
+                  <div className="truncate text-white font-medium">
+                    Import
                   </div>
                   <p className="text-[10px] text-slate-400 truncate">バックアップ復元 (マージ / 置換)</p>
                 </div>
@@ -255,9 +253,8 @@ export function NavigationDrawer({
                   <FileCode className="w-4 h-4" />
                 </div>
                 <div className="text-left min-w-0">
-                  <div className="truncate text-white font-medium flex items-center gap-1.5">
-                    <span>データ仕様・スキーマ</span>
-                    <span className="text-[10px] font-normal text-slate-400 font-mono">(Schema)</span>
+                  <div className="truncate text-white font-medium">
+                    Data Schema
                   </div>
                   <p className="text-[10px] text-slate-400 truncate">JSON Schema (Draft 2020-12) 仕様書</p>
                 </div>
@@ -269,7 +266,7 @@ export function NavigationDrawer({
           {/* Tools & Sharing Section */}
           <div className="space-y-1.5 pt-2 border-t border-slate-700/60">
             <div className="text-[11px] font-bold tracking-wider text-slate-400 uppercase px-3 py-1">
-              ツール & 共有 (Tools & Share)
+              Tools & Share
             </div>
 
             {/* QR Code Share Button */}
@@ -341,7 +338,7 @@ export function NavigationDrawer({
               </div>
               <div className="flex justify-between">
                 <span>UID保護ロック:</span>
-                <span className="text-emerald-400 font-medium">有効 (Enabled)</span>
+                <span className="text-emerald-400 font-medium">Enabled</span>
               </div>
             </div>
           </div>

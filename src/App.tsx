@@ -77,7 +77,7 @@ function AppContent() {
             type="button"
             onClick={() => setIsDrawerOpen(true)}
             className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl text-left hover:bg-slate-800 active:scale-95 transition-all focus:outline-none group cursor-pointer border border-transparent hover:border-slate-700"
-            title="メニューを開く (Open Menu)"
+            title="Open Menu"
             aria-label="Open navigation menu drawer"
           >
             <div className="w-8 h-8 rounded-lg bg-slate-800 group-hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-300 group-hover:text-cyan-300 shadow-sm transition-colors">
@@ -100,7 +100,7 @@ function AppContent() {
                 ? 'bg-blue-600/30 text-cyan-300 border-blue-500/50 shadow-sm shadow-blue-500/20'
                 : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
             }`}
-            title={store.searchQuery ? `検索中: "${store.searchQuery}" (クリックで変更/解除)` : 'タグを検索 (Search)'}
+            title={store.searchQuery ? `Search: "${store.searchQuery}"` : 'Search tags'}
             aria-label="Search NFC tags"
           >
             <Search className="w-4 h-4" />
@@ -127,12 +127,6 @@ function AppContent() {
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
-                <span className="text-[10px] font-medium text-emerald-400 whitespace-nowrap">
-                  Ready
-                </span>
-              </div>
               <button
                 onClick={() => store.startScanning({
                   onSuccess: showSuccess,
@@ -184,7 +178,7 @@ function AppContent() {
       </main>
 
       {/* QR Code Modal for sharing URL */}
-      <Modal isOpen={showQRModal} onClose={() => setShowQRModal(false)} title="アプリ共有 (Share App)">
+      <Modal isOpen={showQRModal} onClose={() => setShowQRModal(false)} title="アプリ共有">
         <div className="flex flex-col items-center justify-center p-4 text-center">
           <div className="p-4 bg-white rounded-2xl shadow-md mb-4">
             <QRCodeSVG 

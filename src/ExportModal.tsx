@@ -78,7 +78,7 @@ export function ExportModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="タグデータのエクスポート (Export)">
+    <Modal isOpen={isOpen} onClose={onClose} title="Export Tags">
       <div className="space-y-4 text-slate-200">
 
         {/* Current State Summary Card */}

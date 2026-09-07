@@ -169,7 +169,7 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="データ仕様・スキーマ定義 (Data Schema)">
+    <Modal isOpen={isOpen} onClose={onClose} title="Data Schema">
       <div className="space-y-4 text-slate-200">
         
         {/* Header Badges & Provenance Info */}

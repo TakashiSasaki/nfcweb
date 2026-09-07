@@ -75,6 +75,11 @@ export function TagCardItem({
   const uidByteCount = Math.round(cleanHex.length / 2);
   const isCopied = copiedUid === tag.uid;
 
+  // Reset image error state whenever the photo source changes
+  useEffect(() => {
+    setImageError(false);
+  }, [photo]);
+
   // Close overflow menu when clicking outside or pressing Escape
   useEffect(() => {
     if (!isMenuOpen) return;
@@ -110,6 +115,7 @@ export function TagCardItem({
     <div 
       className="group relative bg-[#162032] hover:bg-[#1A263B] border border-slate-700/60 hover:border-slate-600/80 rounded-2xl transition-all duration-150 shadow-sm"
       id={`inventory-item-${tag.uid}`}
+      data-testid={`inventory-item-${tag.uid}`}
     >
       {/* 
         ========================================================================
@@ -120,9 +126,13 @@ export function TagCardItem({
         <div className="flex items-start sm:items-center gap-3">
           
           {/* Optional Item Photo Thumbnail with Accessible Fallback */}
-          <div className="relative w-11 h-11 sm:w-13 sm:h-13 rounded-xl overflow-hidden flex-shrink-0 bg-slate-800/80 border border-slate-700/60 shadow-inner flex items-center justify-center select-none">
+          <div 
+            data-testid="tag-photo-container"
+            className="relative w-11 h-11 sm:w-13 sm:h-13 rounded-xl overflow-hidden flex-shrink-0 bg-slate-800/80 border border-slate-700/60 shadow-inner flex items-center justify-center select-none"
+          >
             {photo && !imageError ? (
               <img
+                data-testid="tag-photo-img"
                 src={photo}
                 alt={tag.name ? `Photo of ${tag.name}` : `Item photo for UID ${tag.uid}`}
                 onError={() => setImageError(true)}
@@ -133,6 +143,7 @@ export function TagCardItem({
             ) : (
               /* Lightweight, quiet fallback (not an oversized broken placeholder) */
               <div 
+                data-testid="tag-photo-fallback"
                 className="w-full h-full flex flex-col items-center justify-center text-slate-400/90 group-hover:text-slate-300 transition-colors"
                 title={tag.name ? `Item: ${tag.name}` : `UID: ${tag.uid}`}
                 aria-label="No photo available"
@@ -142,7 +153,7 @@ export function TagCardItem({
                     {tag.name.trim().slice(0, 2)}
                   </span>
                 ) : (
-                  <Radio className="w-5 h-5 text-slate-400/80" />
+                  <Radio className="w-5 h-5 text-slate-400/80" aria-hidden="true" />
                 )}
               </div>
             )}
@@ -302,6 +313,7 @@ export function TagCardItem({
             {/* Primary Action: Write */}
             <button
               type="button"
+              data-testid="tag-action-write"
               onClick={() => onOpenSafeWrite(tag)}
               className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-sky-500/15 hover:bg-sky-500/25 active:bg-sky-500/30 text-sky-300 hover:text-white rounded-lg text-xs font-semibold border border-sky-500/30 transition-all active:scale-95 cursor-pointer"
               title={`Write or edit records for tag ${tag.uid}`}
@@ -314,6 +326,7 @@ export function TagCardItem({
             {/* Progressive Disclosure Toggle Button */}
             <button
               type="button"
+              data-testid="tag-details-toggle"
               onClick={() => setIsExpanded(!isExpanded)}
               aria-expanded={isExpanded}
               aria-controls={`details-${tag.uid}`}
@@ -336,6 +349,7 @@ export function TagCardItem({
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
+                data-testid="tag-overflow-menu-button"
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
                 aria-haspopup="menu"
                 aria-expanded={isMenuOpen}
@@ -354,6 +368,7 @@ export function TagCardItem({
               {isMenuOpen && (
                 <div 
                   role="menu"
+                  data-testid="tag-overflow-menu"
                   className="absolute right-0 top-full mt-1 w-44 bg-[#0F172A] border border-slate-700/90 rounded-xl shadow-xl shadow-black/60 p-1 z-30 animate-fade-in text-xs font-medium"
                 >
                   <button

@@ -199,7 +199,7 @@ export function ImportModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleModalClose} title="タグデータのインポート (Import)">
+    <Modal isOpen={isOpen} onClose={handleModalClose} title="Import Tags">
       <div className="space-y-4 text-slate-200">
 
         {/* Physical NFC Safety Notice */}
@@ -306,14 +306,14 @@ export function ImportModal({
                 </div>
               </div>
               <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800">
-                <div className="text-[10px] text-slate-400">新規追加 (New)</div>
+                <div className="text-[10px] text-slate-400">新規追加</div>
                 <div className="text-sm font-bold font-mono text-emerald-400 mt-0.5">
                   +{importPlan.newCount} 件
                 </div>
               </div>
               <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800">
                 <div className="text-[10px] text-slate-400">
-                  {importMode === 'merge' ? '上書き更新 (Update)' : '消去対象 (Remove)'}
+                  {importMode === 'merge' ? '上書き更新' : '消去対象'}
                 </div>
                 <div className={`text-sm font-bold font-mono mt-0.5 ${
                   importMode === 'merge' ? 'text-amber-400' : 'text-red-400'
@@ -322,7 +322,7 @@ export function ImportModal({
                 </div>
               </div>
               <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800">
-                <div className="text-[10px] text-slate-400">反映後タグ総数 (Result)</div>
+                <div className="text-[10px] text-slate-400">反映後タグ総数</div>
                 <div className="text-sm font-bold font-mono text-cyan-300 mt-0.5">
                   {importPlan.resultingCount} 件
                 </div>
@@ -357,7 +357,7 @@ export function ImportModal({
                   }`}
                 >
                   <div className="text-xs font-bold flex items-center justify-between">
-                    <span>マージ (Merge: 推奨)</span>
+                    <span>マージ (推奨)</span>
                     {importMode === 'merge' && <CheckCircle2 className="w-4 h-4 text-cyan-400" />}
                   </div>
                   <p className="text-[10px] text-slate-300 mt-1 leading-relaxed">
@@ -379,7 +379,7 @@ export function ImportModal({
                   }`}
                 >
                   <div className="text-xs font-bold flex items-center justify-between">
-                    <span>置換 (Replace: 完全置換)</span>
+                    <span>置換 (完全置換)</span>
                     {importMode === 'replace' && <CheckCircle2 className="w-4 h-4 text-red-400" />}
                   </div>
                   <p className="text-[10px] text-slate-300 mt-1 leading-relaxed">

@@ -33,6 +33,18 @@ export function SearchModal({ isOpen, onClose, store }: SearchModalProps) {
     }
   }, [isOpen]);
 
+  // Global Escape key listener
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   // Calculate matching tags
@@ -49,7 +61,7 @@ export function SearchModal({ isOpen, onClose, store }: SearchModalProps) {
     : tags.length;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === 'Escape') {
+    if (e.key === 'Enter') {
       onClose();
     }
   };
@@ -70,11 +82,8 @@ export function SearchModal({ isOpen, onClose, store }: SearchModalProps) {
               <Search className="w-4 h-4 text-cyan-400" />
             </div>
             <h3 className="text-sm sm:text-base font-bold text-white">
-              タグ検索
+              Search Tags
             </h3>
-            <span className="text-[11px] text-slate-400 font-mono">
-              (Search Tags)
-            </span>
           </div>
           <button 
             type="button"

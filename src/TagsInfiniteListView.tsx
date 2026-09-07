@@ -631,7 +631,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
         <Modal
           isOpen={true}
           onClose={closeSafeWriteModal}
-          title="NFCタグ書き込み・編集 (Safe Write)"
+          title="Safe Write"
         >
           <div className="p-3 sm:p-4 space-y-4">
             
@@ -683,9 +683,9 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
                         onChange={e => handleUpdateRecord(rec.id, { recordType: e.target.value as any })}
                         className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none"
                       >
-                        <option value="text">Text (テキスト)</option>
-                        <option value="url">URL (リンク)</option>
-                        <option value="mime">MIME / JSON</option>
+                        <option value="text">Text</option>
+                        <option value="url">URL</option>
+                        <option value="mime">MIME</option>
                       </select>
                     </div>
 
@@ -792,7 +792,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
                   className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs sm:text-sm transition-colors shadow-lg shadow-blue-950/40 flex items-center justify-center gap-1.5"
                 >
                   <PenTool className="w-4 h-4" />
-                  <span>書込待機を開始 (Scan to Write)</span>
+                  <span>Scan to Write</span>
                 </button>
               )}
             </div>
@@ -828,7 +828,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  UID事前検査安全ロック (Active)
+                  UID事前検査安全ロック
                 </span>
                 <span className="px-2 py-0.5 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 rounded text-[10px] font-mono font-bold">
                   UID LOCKED
@@ -894,7 +894,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
                   className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold text-xs sm:text-sm transition-colors shadow-lg shadow-red-950/40 flex items-center justify-center gap-1.5"
                 >
                   <Trash2 className="w-4 h-4" />
-                  <span>消去待機を開始 (Scan to Erase)</span>
+                  <span>Scan to Erase</span>
                 </button>
               )}
             </div>
