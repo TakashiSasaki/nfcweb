@@ -7,20 +7,135 @@ import {
   Download, 
   Info, 
   BookOpen, 
-  CheckCircle2, 
-  Layers, 
-  FileJson,
-  ExternalLink
+  FileJson
 } from 'lucide-react';
-import { registrySchema } from './data-transfer/validate';
-import { EXAMPLE_TAG_REGISTRY_V1 } from './data-transfer/example';
-import { downloadJsonFile } from './data-transfer/export';
-import { CANONICAL_FORMAT, CANONICAL_SCHEMA_VERSION } from './data-transfer/types';
-import { APP_VERSION_TAG } from './version';
+import { registrySchema } from './data-format/validate';
+import { EXAMPLE_TAG_REGISTRY_V1 } from './data-format/example';
+import { downloadJsonFile } from './data-format';
+import { CANONICAL_FORMAT, CANONICAL_SCHEMA_VERSION } from './data-format/types';
 
 interface DataSchemaModalProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+interface SchemaPropertyInfo {
+  name: string;
+  type: string;
+  isRequired: boolean;
+  description: string;
+  constraints?: string[];
+  example?: string;
+}
+
+function extractPropertiesFromSchema(
+  schemaDef: any,
+  requiredList: string[] = []
+): SchemaPropertyInfo[] {
+  if (!schemaDef || !schemaDef.properties) return [];
+
+  const requiredSet = new Set(schemaDef.required || requiredList);
+  return Object.entries<any>(schemaDef.properties).map(([name, prop]) => {
+    const isRequired = requiredSet.has(name);
+    let typeDisplay = prop.type || (prop.const !== undefined ? 'constant' : (prop.$ref ? 'ref' : 'any'));
+
+    if (prop.const !== undefined) {
+      typeDisplay = `const: ${JSON.stringify(prop.const)}`;
+    } else if (prop.enum) {
+      typeDisplay = prop.enum.map((v: any) => JSON.stringify(v)).join(' | ');
+    } else if (prop.type === 'array' && prop.items) {
+      const itemType = prop.items.$ref ? prop.items.$ref.split('/').pop() : prop.items.type || 'item';
+      typeDisplay = `${itemType}[]`;
+    }
+
+    const constraints: string[] = [];
+    if (prop.pattern) constraints.push(`pattern: ${prop.pattern}`);
+    if (prop.minimum !== undefined) constraints.push(`min: ${prop.minimum}`);
+    if (prop.maximum !== undefined) constraints.push(`max: ${prop.maximum}`);
+    if (prop.minLength !== undefined) constraints.push(`minLength: ${prop.minLength}`);
+    if (prop.maxLength !== undefined) constraints.push(`maxLength: ${prop.maxLength}`);
+
+    let exampleStr: string | undefined;
+    if (prop.examples && prop.examples.length > 0) {
+      exampleStr = JSON.stringify(prop.examples[0]);
+    } else if (prop.default !== undefined) {
+      exampleStr = `default: ${JSON.stringify(prop.default)}`;
+    }
+
+    return {
+      name,
+      type: typeDisplay,
+      isRequired,
+      description: prop.description || '',
+      constraints: constraints.length > 0 ? constraints : undefined,
+      example: exampleStr
+    };
+  });
+}
+
+function SchemaPropertyTable({
+  title,
+  dotColor,
+  properties
+}: {
+  title: string;
+  dotColor: string;
+  properties: SchemaPropertyInfo[];
+}) {
+  return (
+    <div className="space-y-2">
+      <h4 className="font-bold text-slate-200 flex items-center gap-1.5 text-xs">
+        <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+        <span>{title}</span>
+      </h4>
+      <div className="overflow-x-auto rounded-xl border border-slate-700 bg-slate-900/60">
+        <table className="w-full text-left text-[11px] border-collapse">
+          <thead>
+            <tr className="bg-slate-800/80 text-slate-300 border-b border-slate-700">
+              <th className="p-2 font-mono">フィールド名</th>
+              <th className="p-2 font-mono">型 / 定数</th>
+              <th className="p-2">必須</th>
+              <th className="p-2">説明 / 制約</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800 text-slate-300">
+            {properties.map((p) => (
+              <tr key={p.name} className="hover:bg-slate-800/40 transition-colors">
+                <td className="p-2 font-mono text-cyan-300 font-medium">{p.name}</td>
+                <td className="p-2 font-mono text-amber-300 text-[10px] break-all">{p.type}</td>
+                <td className="p-2">
+                  {p.isRequired ? (
+                    <span className="text-emerald-400 font-bold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30 text-[10px]">
+                      必須
+                    </span>
+                  ) : (
+                    <span className="text-slate-500 text-[10px]">任意</span>
+                  )}
+                </td>
+                <td className="p-2 space-y-1">
+                  <div>{p.description}</div>
+                  {p.constraints && (
+                    <div className="flex flex-wrap gap-1">
+                      {p.constraints.map((c, i) => (
+                        <span key={i} className="font-mono text-[9px] bg-slate-800 text-cyan-300 px-1 py-0.2 rounded border border-slate-700">
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {p.example && (
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      例: <code className="text-slate-300">{p.example}</code>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
@@ -29,6 +144,14 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
 
   const rawSchemaString = JSON.stringify(registrySchema, null, 2);
   const rawExampleString = JSON.stringify(EXAMPLE_TAG_REGISTRY_V1, null, 2);
+
+  // Derive field specs dynamically from Single Source of Truth schema
+  const rootProperties = extractPropertiesFromSchema(registrySchema);
+  const tagProperties = extractPropertiesFromSchema(registrySchema?.$defs?.ExportableTagV1);
+  const textRecordProperties = extractPropertiesFromSchema(registrySchema?.$defs?.TextRecord);
+  const urlRecordProperties = extractPropertiesFromSchema(registrySchema?.$defs?.UrlRecord);
+  const mimeRecordProperties = extractPropertiesFromSchema(registrySchema?.$defs?.MimeRecord);
+  const emptyRecordProperties = extractPropertiesFromSchema(registrySchema?.$defs?.EmptyRecord);
 
   const handleCopy = (text: string, sectionId: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -67,7 +190,7 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
             <div className="flex items-center gap-1.5">
               <span className="font-semibold text-slate-400">規格:</span>
               <span className="font-mono text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded">
-                Draft 2020-12
+                Draft 2020-12 (SSOT)
               </span>
             </div>
           </div>
@@ -85,7 +208,7 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
             }`}
           >
             <BookOpen className="w-3.5 h-3.5" />
-            <span>フィールド仕様リファレンス</span>
+            <span>スキーマ導出リファレンス</span>
           </button>
 
           <button
@@ -98,7 +221,7 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
             }`}
           >
             <FileCode className="w-3.5 h-3.5" />
-            <span>JSON Schema (定義)</span>
+            <span>JSON Schema (厳格定義)</span>
           </button>
 
           <button
@@ -115,218 +238,65 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
           </button>
         </div>
 
-        {/* Tab 1: Human-Readable Field Reference */}
+        {/* Tab 1: Human-Readable Field Reference Derived from Schema */}
         {activeTab === 'docs' && (
           <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1 text-xs">
-            {/* Versioning & Compatibility explanation */}
+            {/* Versioning & Single Source of Truth Note */}
             <div className="p-3 bg-blue-950/40 border border-blue-500/30 rounded-xl space-y-1.5">
               <div className="font-bold text-blue-300 flex items-center gap-1.5">
                 <Info className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                <span>互換性ポリシー & バージョニング設計</span>
+                <span>スキーマ単一情報源 (SSOT) & 互換性原則</span>
               </div>
               <p className="text-slate-300 leading-relaxed text-[11px]">
-                <code>schemaVersion</code> (現在 <code>1</code>) は外部連携仕様の契約バージョンを示し、後方互換性のない変更時にのみインクリメントされます。
-                <code>appVersion</code> は出力時のアプリ版数（記録用）であり、インポート時の互換性判定には使用されません。
-                将来の拡張フィールドに対応するため、未知のプロパティの混入を防ぐ厳格な検証が適用されます。
+                本仕様表は <code>nfcweb-tag-registry.schema.json</code> (Draft 2020-12) から自動抽出・描画されています。
+                <code>schemaVersion</code> はデータ契約の確定バージョンを示し、<code>additionalProperties: false</code> により厳格なスキーマ検証が行われます。
               </p>
             </div>
 
             {/* Top-Level Document Structure */}
-            <div className="space-y-2">
-              <h4 className="font-bold text-slate-200 flex items-center gap-1.5 text-xs">
-                <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                <span>トップレベル・ドキュメント構造 (Root Document)</span>
-              </h4>
-              <div className="overflow-x-auto rounded-xl border border-slate-700 bg-slate-900/60">
-                <table className="w-full text-left text-[11px] border-collapse">
-                  <thead>
-                    <tr className="bg-slate-800/80 text-slate-300 border-b border-slate-700">
-                      <th className="p-2 font-mono">フィールド名</th>
-                      <th className="p-2 font-mono">型</th>
-                      <th className="p-2">必須</th>
-                      <th className="p-2">説明・制約</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 text-slate-300 font-sans">
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">format</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">固定値: <code>"nfcweb-tag-registry"</code>。フォーマット識別子。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">schemaVersion</td>
-                      <td className="p-2 font-mono text-amber-300">integer</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">固定値: <code>1</code>。スキーマ仕様バージョン。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">exportedAt</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">ISO 8601 UTCタイムスタンプ (例: <code>2026-09-07T01:23:45.678Z</code>)。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">appVersion</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">エクスポート時のアプリバージョン (出所記録用)。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">tags</td>
-                      <td className="p-2 font-mono text-amber-300">array</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">NFCタグ登録レコードの配列。空配列も許容。</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <SchemaPropertyTable
+              title="トップレベル・ドキュメント構造 (Root Document)"
+              dotColor="bg-cyan-400"
+              properties={rootProperties}
+            />
 
             {/* Tag Item Structure */}
-            <div className="space-y-2">
-              <h4 className="font-bold text-slate-200 flex items-center gap-1.5 text-xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span>NFCタグ構造体 (NFCTagItem)</span>
-              </h4>
-              <div className="overflow-x-auto rounded-xl border border-slate-700 bg-slate-900/60">
-                <table className="w-full text-left text-[11px] border-collapse">
-                  <thead>
-                    <tr className="bg-slate-800/80 text-slate-300 border-b border-slate-700">
-                      <th className="p-2 font-mono">フィールド名</th>
-                      <th className="p-2 font-mono">型</th>
-                      <th className="p-2">必須</th>
-                      <th className="p-2">説明・制約</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 text-slate-300">
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">uid</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">1文字以上のNFCタグ固有UID (レジストリの一意キー)。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">name</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-slate-500">任意</td>
-                      <td className="p-2">ユーザー定義のタグ表示名・ニックネーム。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">firstSeen</td>
-                      <td className="p-2 font-mono text-amber-300">integer</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">初回検出エポックミリ秒 (0以上)。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">lastRead</td>
-                      <td className="p-2 font-mono text-amber-300">integer</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">最終読み取りエポックミリ秒 (0以上)。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">readCount</td>
-                      <td className="p-2 font-mono text-amber-300">integer</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">読み取り累計回数 (0以上)。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">lastAction</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-slate-500">任意</td>
-                      <td className="p-2">最終操作種別: <code>"read" | "write" | "erase"</code>。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">tagType</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-slate-500">任意</td>
-                      <td className="p-2">ICチップ種別ヒント (例: NTAG213, MIFARE Ultralight)。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">hasNdef</td>
-                      <td className="p-2 font-mono text-amber-300">boolean</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">有効なNDEFレコードが存在するかどうかのフラグ。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">records</td>
-                      <td className="p-2 font-mono text-amber-300">array</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">NDEFレコード構造体の配列。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">notes</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-slate-500">任意</td>
-                      <td className="p-2">タグに関するメモ・備考。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">isSample</td>
-                      <td className="p-2 font-mono text-amber-300">boolean</td>
-                      <td className="p-2 text-slate-500">任意</td>
-                      <td className="p-2">模擬生成されたサンプルタグかどうかの識別フラグ。</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <SchemaPropertyTable
+              title="NFCタグ登録データ構造 (ExportableTagV1)"
+              dotColor="bg-emerald-400"
+              properties={tagProperties}
+            />
 
-            {/* NDEF Record Structure */}
-            <div className="space-y-2">
-              <h4 className="font-bold text-slate-200 flex items-center gap-1.5 text-xs">
+            {/* NDEF Record Variants */}
+            <div className="space-y-3 pt-2">
+              <h4 className="font-bold text-slate-200 flex items-center gap-1.5 text-xs border-b border-slate-700/60 pb-1">
                 <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                <span>NDEFレコード構造体 (EditableNDEFRecord)</span>
+                <span>NDEFレコード型別仕様 ($defs / oneOf)</span>
               </h4>
-              <div className="overflow-x-auto rounded-xl border border-slate-700 bg-slate-900/60">
-                <table className="w-full text-left text-[11px] border-collapse">
-                  <thead>
-                    <tr className="bg-slate-800/80 text-slate-300 border-b border-slate-700">
-                      <th className="p-2 font-mono">フィールド名</th>
-                      <th className="p-2 font-mono">型</th>
-                      <th className="p-2">必須</th>
-                      <th className="p-2">説明・制約</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 text-slate-300">
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">id</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">レコードの一意識別子 (1文字以上)。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">recordType</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">種別: <code>"text" | "url" | "mime" | "empty"</code>。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">data</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-emerald-400 font-bold">必須</td>
-                      <td className="p-2">ペイロードデータ。URL、テキスト、またはシリアライズ文字列。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">mediaType</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-indigo-400 font-bold">条件付必須</td>
-                      <td className="p-2"><code>recordType="mime"</code> の時のみ必須 (例: <code>application/json</code>)。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">lang</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-slate-500">任意</td>
-                      <td className="p-2">言語コード (例: <code>"ja"</code>, <code>"en"</code>)。</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 font-mono text-cyan-300">encoding</td>
-                      <td className="p-2 font-mono text-amber-300">string</td>
-                      <td className="p-2 text-slate-500">任意</td>
-                      <td className="p-2">文字エンコーディング (例: <code>"utf-8"</code>)。</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+              
+              <SchemaPropertyTable
+                title="1. テキストレコード (TextRecord: recordType='text')"
+                dotColor="bg-sky-400"
+                properties={textRecordProperties}
+              />
+
+              <SchemaPropertyTable
+                title="2. URLレコード (UrlRecord: recordType='url')"
+                dotColor="bg-teal-400"
+                properties={urlRecordProperties}
+              />
+
+              <SchemaPropertyTable
+                title="3. MIMEレコード (MimeRecord: recordType='mime')"
+                dotColor="bg-amber-400"
+                properties={mimeRecordProperties}
+              />
+
+              <SchemaPropertyTable
+                title="4. 空レコード (EmptyRecord: recordType='empty')"
+                dotColor="bg-slate-400"
+                properties={emptyRecordProperties}
+              />
             </div>
           </div>
         )}
@@ -336,7 +306,7 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-mono text-slate-400">
-                src/data-transfer/nfcweb-tag-registry.schema.json
+                src/data-format/nfcweb-tag-registry.schema.json
               </span>
               <div className="flex items-center gap-1.5">
                 <button

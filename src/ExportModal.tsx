@@ -17,9 +17,10 @@ import {
   buildTagRegistryExportV1, 
   serializeExportDocument, 
   generateExportFilename, 
-  downloadJsonFile 
-} from './data-transfer/export';
-import { CANONICAL_FORMAT, CANONICAL_SCHEMA_VERSION } from './data-transfer/types';
+  downloadJsonFile,
+  CANONICAL_FORMAT,
+  CANONICAL_SCHEMA_VERSION
+} from './data-format';
 
 interface ExportModalProps {
   isOpen: boolean;

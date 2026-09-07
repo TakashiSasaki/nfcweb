@@ -4,29 +4,23 @@ import {
   Upload, 
   CheckCircle2, 
   AlertCircle, 
-  AlertTriangle, 
   FileText, 
   FileCode, 
-  Layers, 
-  ArrowRight, 
   ShieldAlert, 
-  X,
-  RefreshCw,
   Info
 } from 'lucide-react';
 import { useToast } from './toast';
 import { NFCTagItem } from './types';
 import { 
   validateImportPayload, 
-  calculatePreflightStats, 
-  applyMerge, 
-  applyReplace,
+  buildImportPlan, 
+  applyImportPlan, 
   MAX_IMPORT_FILE_SIZE_BYTES,
-  NfcwebTagRegistryExportV1,
-  ImportPreflightStats,
+  ImportPlan,
   ImportMode,
-  ImportValidationError
-} from './data-transfer';
+  ImportValidationError,
+  TagRegistryExportDocumentV1
+} from './data-format';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -43,7 +37,7 @@ export function ImportModal({
   onCommitImport,
   onOpenSchema
 }: ImportModalProps) {
-  const { showSuccess, showError, showWarning, showInfo } = useToast();
+  const { showSuccess, showError, showInfo } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -53,20 +47,16 @@ export function ImportModal({
   // Staged State
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [selectedFileSize, setSelectedFileSize] = useState<number | null>(null);
-  const [validatedDoc, setValidatedDoc] = useState<NfcwebTagRegistryExportV1 | null>(null);
-  const [isLegacy, setIsLegacy] = useState(false);
-  const [legacyWarning, setLegacyWarning] = useState<string | null>(null);
-  const [preflightStats, setPreflightStats] = useState<ImportPreflightStats | null>(null);
+  const [validatedDoc, setValidatedDoc] = useState<TagRegistryExportDocumentV1 | null>(null);
+  const [importPlan, setImportPlan] = useState<ImportPlan | null>(null);
   const [validationErrors, setValidationErrors] = useState<ImportValidationError[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [, setIsProcessing] = useState(false);
 
   const resetImportState = () => {
     setSelectedFileName(null);
     setSelectedFileSize(null);
     setValidatedDoc(null);
-    setIsLegacy(false);
-    setLegacyWarning(null);
-    setPreflightStats(null);
+    setImportPlan(null);
     setValidationErrors([]);
     setConfirmReplaceChecked(false);
     if (fileInputRef.current) {
@@ -77,6 +67,14 @@ export function ImportModal({
   const handleModalClose = () => {
     resetImportState();
     onClose();
+  };
+
+  const handleModeChange = (newMode: ImportMode) => {
+    setImportMode(newMode);
+    if (validatedDoc) {
+      const plan = buildImportPlan(validatedDoc, localTags, newMode);
+      setImportPlan(plan);
+    }
   };
 
   const processRawFile = (file: File) => {
@@ -124,7 +122,7 @@ export function ImportModal({
         return;
       }
 
-      // 3. Schema & Semantic Validation
+      // 3. Schema & Canonical Validation (Draft 2020-12 SSOT)
       const result = validateImportPayload(parsed);
       if (!result.ok || !result.document) {
         const errors = result.errors || [{ path: '#', message: '検証エラーが発生しました' }];
@@ -133,20 +131,13 @@ export function ImportModal({
         return;
       }
 
-      // 4. Staged validation success
-      setValidatedDoc(result.document);
-      setIsLegacy(Boolean(result.isLegacy));
-      setLegacyWarning(result.legacyWarning || null);
+      // 4. Staged validation success & Preflight Plan calculation
+      const validDoc = result.document;
+      setValidatedDoc(validDoc);
+      const plan = buildImportPlan(validDoc, localTags, importMode);
+      setImportPlan(plan);
 
-      // 5. Calculate Preflight Statistics
-      const stats = calculatePreflightStats(result.document, localTags);
-      setPreflightStats(stats);
-
-      if (result.isLegacy) {
-        showWarning('旧形式の検出', result.legacyWarning || '旧形式のタグ配列をv1形式に正規化しました。');
-      } else {
-        showInfo('検証完了', `${result.document.tags.length} 件のタグデータをプレビュー準備しました。`);
-      }
+      showInfo('検証完了', `${validDoc.tags.length} 件のタグデータをプレビュー準備しました。`);
     };
 
     reader.onerror = () => {
@@ -180,7 +171,7 @@ export function ImportModal({
   };
 
   const handleExecuteImport = () => {
-    if (!validatedDoc) return;
+    if (!importPlan) return;
 
     if (importMode === 'replace' && !confirmReplaceChecked) {
       showError('確認が必要です', '置換モードを実行するには、既存データ消去への同意チェックが必要です。');
@@ -188,9 +179,7 @@ export function ImportModal({
     }
 
     try {
-      const resultingTags = importMode === 'merge' 
-        ? applyMerge(validatedDoc.tags, localTags)
-        : applyReplace(validatedDoc.tags);
+      const resultingTags = applyImportPlan(importPlan);
 
       // Mutate through store and handle storage quota safety
       const commitRes = onCommitImport(resultingTags);
@@ -201,7 +190,7 @@ export function ImportModal({
 
       showSuccess(
         importMode === 'merge' ? 'マージ完了' : '置換完了',
-        `${validatedDoc.tags.length} 件を取り込みました (登録タグ総数: ${resultingTags.length} 件)。`
+        `${importPlan.totalImported} 件を取り込みました (登録タグ総数: ${resultingTags.length} 件)。`
       );
       handleModalClose();
     } catch (err: any) {
@@ -218,7 +207,7 @@ export function ImportModal({
           <Info className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
           <div className="leading-relaxed text-slate-300">
             <span className="font-bold text-cyan-300">安全確認: </span>
-            インポートは端末のローカルレジストリのみを変更します。物理的なNFCタグへの書き込みは一切行いません。
+            インポートは端末のローカルレジストリ（ブラウザ内ストレージ）のみを変更します。物理的なNFCタグへの無線通信・書き込みは一切行いません。
           </div>
         </div>
 
@@ -256,7 +245,7 @@ export function ImportModal({
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2 text-[10px] font-mono text-slate-500">
-                <span>対応形式: .json (Canonical v1 / レガシー配列)</span>
+                <span>対応形式: .json (Canonical v1 / Draft 2020-12)</span>
                 <span>•</span>
                 <span>上限: 5 MiB</span>
               </div>
@@ -285,7 +274,7 @@ export function ImportModal({
         )}
 
         {/* Step 2: Preflight Preview & Import Execution Mode */}
-        {validatedDoc && preflightStats && (
+        {validatedDoc && importPlan && (
           <div className="space-y-4">
             
             {/* File Info Bar with Re-select button */}
@@ -308,35 +297,28 @@ export function ImportModal({
               </button>
             </div>
 
-            {/* Legacy Warning Banner if applicable */}
-            {isLegacy && (
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5 text-xs text-amber-200">
-                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold">旧形式データ: </span>
-                  {legacyWarning || '非バージョン管理の旧形式タグ配列が検出されました。v1規格に正規化して取り込みます。'}
-                </div>
-              </div>
-            )}
-
             {/* Preflight Statistics Cards */}
             <div className="grid grid-cols-3 gap-2 text-center text-xs">
               <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
                 <div className="text-[10px] text-slate-400">取り込み総数</div>
                 <div className="text-base font-bold font-mono text-cyan-300 mt-0.5">
-                  {preflightStats.totalImported} 件
+                  {importPlan.totalImported} 件
                 </div>
               </div>
               <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
                 <div className="text-[10px] text-slate-400">新規追加 (New)</div>
                 <div className="text-base font-bold font-mono text-emerald-400 mt-0.5">
-                  +{preflightStats.newCount} 件
+                  +{importPlan.newCount} 件
                 </div>
               </div>
               <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
-                <div className="text-[10px] text-slate-400">更新/重複 (Conflicts)</div>
-                <div className="text-base font-bold font-mono text-amber-400 mt-0.5">
-                  {preflightStats.conflictCount} 件
+                <div className="text-[10px] text-slate-400">
+                  {importMode === 'merge' ? '上書き更新' : '消去対象'}
+                </div>
+                <div className={`text-base font-bold font-mono mt-0.5 ${
+                  importMode === 'merge' ? 'text-amber-400' : 'text-red-400'
+                }`}>
+                  {importMode === 'merge' ? `${importPlan.updateCount} 件` : `-${importPlan.removedCount} 件`}
                 </div>
               </div>
             </div>
@@ -350,7 +332,7 @@ export function ImportModal({
                 {/* Merge Option */}
                 <button
                   type="button"
-                  onClick={() => setImportMode('merge')}
+                  onClick={() => handleModeChange('merge')}
                   className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                     importMode === 'merge'
                       ? 'border-cyan-500/60 bg-cyan-950/40 text-cyan-100 shadow-sm'
@@ -362,17 +344,17 @@ export function ImportModal({
                     {importMode === 'merge' && <CheckCircle2 className="w-4 h-4 text-cyan-400" />}
                   </div>
                   <p className="text-[10px] text-slate-300 mt-1 leading-relaxed">
-                    既存データを維持しながら新規UIDを追加。重複時はインポート側を優先適用。
+                    既存データを維持しながら新規UIDを追加。重複時はファイル側レコードで上書き更新。
                   </p>
                   <div className="mt-2 text-[10px] font-mono text-cyan-300/80">
-                    反映後: {localTags.length + preflightStats.newCount} 件
+                    反映後: {importPlan.resultingCount} 件
                   </div>
                 </button>
 
                 {/* Replace Option */}
                 <button
                   type="button"
-                  onClick={() => setImportMode('replace')}
+                  onClick={() => handleModeChange('replace')}
                   className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                     importMode === 'replace'
                       ? 'border-red-500/60 bg-red-950/40 text-red-100 shadow-sm'
@@ -384,10 +366,10 @@ export function ImportModal({
                     {importMode === 'replace' && <CheckCircle2 className="w-4 h-4 text-red-400" />}
                   </div>
                   <p className="text-[10px] text-slate-300 mt-1 leading-relaxed">
-                    既存レジストリを全消去し、ファイル内のデータのみに完全入れ替え。
+                    既存レジストリを全消去し、ファイル内の登録データのみに完全入れ替え。
                   </p>
                   <div className="mt-2 text-[10px] font-mono text-red-300/80">
-                    反映後: {preflightStats.totalImported} 件
+                    反映後: {importPlan.resultingCount} 件
                   </div>
                 </button>
               </div>
@@ -417,30 +399,32 @@ export function ImportModal({
             {/* Diff Preview List */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-[11px] text-slate-400">
-                <span className="font-semibold">取り込み対象プレビュー (先頭10件)</span>
-                <span>全 {preflightStats.diffs.length} 件</span>
+                <span className="font-semibold">取り込み対象アクションプレビュー</span>
+                <span>全 {importPlan.actions.length} 件</span>
               </div>
               <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
-                {preflightStats.diffs.slice(0, 10).map((diff, i) => (
+                {importPlan.actions.slice(0, 15).map((action, i) => (
                   <div 
                     key={i} 
                     className="flex items-center justify-between p-1.5 bg-slate-950/60 rounded-lg border border-slate-800 text-[11px]"
                   >
                     <div className="flex items-center gap-2 truncate">
                       <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
-                        diff.status === 'new' 
+                        action.type === 'add' 
                           ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
-                          : diff.status === 'update' 
+                          : action.type === 'update' 
                           ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
+                          : action.type === 'remove'
+                          ? 'bg-red-500/20 text-red-300 border border-red-500/30'
                           : 'bg-slate-800 text-slate-400'
                       }`}>
-                        {diff.status === 'new' ? '新規' : diff.status === 'update' ? '更新' : '同一'}
+                        {action.type === 'add' ? '新規追加' : action.type === 'update' ? '更新' : action.type === 'remove' ? '削除' : '維持'}
                       </span>
-                      <span className="font-mono text-slate-300">{diff.uid}</span>
-                      {diff.name && <span className="text-slate-400 truncate">({diff.name})</span>}
+                      <span className="font-mono text-slate-300">{action.uid}</span>
+                      {action.name && <span className="text-slate-400 truncate">({action.name})</span>}
                     </div>
                     <span className="text-[10px] text-slate-500 font-mono flex-shrink-0">
-                      {diff.recordCount} recs
+                      {action.recordCount} recs
                     </span>
                   </div>
                 ))}
@@ -473,7 +457,7 @@ export function ImportModal({
               閉じる
             </button>
 
-            {validatedDoc && (
+            {validatedDoc && importPlan && (
               <button
                 type="button"
                 onClick={handleExecuteImport}

@@ -32,9 +32,9 @@ import {
   analyzeNTAGCapacity, 
   getTagTypeHint, 
   formatNDEFPayloadForNFC, 
-  normalizeUid, 
   parseRawNDEFToEditable 
 } from './store';
+import { normalizeUid } from './domain/uid';
 import { useToast } from './toast';
 import { renderControlCharContent, ControlCharViewer, analyzeControlChars } from './ControlCharViewer';
 import { Modal } from './Modal';

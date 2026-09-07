@@ -1,0 +1,257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://takashisasaki.github.io/nfcweb/schemas/v1/nfcweb-tag-registry.schema.json",
+  "title": "NFCWeb Tag Registry Interchange Schema",
+  "description": "Canonical v1 interchange format for the NFCWeb NFC tag registry backup and migration.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schemaVersion",
+    "exportedAt",
+    "appVersion",
+    "tags"
+  ],
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "nfcweb-tag-registry",
+      "description": "Identifier of the data interchange format."
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Interchange schema specification version. Incremented only for breaking schema changes."
+    },
+    "exportedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of export generation."
+    },
+    "appVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Application release version recorded at export time for provenance."
+    },
+    "tags": {
+      "type": "array",
+      "description": "Collection of NFC tag registry entries.",
+      "items": {
+        "$ref": "#/$defs/ExportableTagV1"
+      }
+    }
+  },
+  "$defs": {
+    "ExportableTagV1": {
+      "type": "object",
+      "title": "ExportableTagV1",
+      "description": "Canonical representation of a managed NFC tag entry in the registry.",
+      "additionalProperties": false,
+      "required": [
+        "uid",
+        "firstSeen",
+        "lastRead",
+        "readCount",
+        "hasNdef",
+        "records"
+      ],
+      "properties": {
+        "uid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8,32}$",
+          "description": "Canonical lowercase hexadecimal UID representation without separators (e.g. 045ab23c9d8001).",
+          "examples": [
+            "045ab23c9d8001",
+            "04881f6a229002",
+            "012e3d4c5b6a7b8c"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Optional user-assigned name or nickname for the tag."
+        },
+        "firstSeen": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Epoch timestamp in milliseconds when the tag was first discovered."
+        },
+        "lastRead": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Epoch timestamp in milliseconds of the most recent read or write interaction."
+        },
+        "readCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of times this tag has been read or accessed."
+        },
+        "lastAction": {
+          "type": "string",
+          "enum": [
+            "read",
+            "write",
+            "erase"
+          ],
+          "description": "Most recent action performed with this tag in NFCWeb."
+        },
+        "tagType": {
+          "type": "string",
+          "description": "Hardware IC chip hint (e.g. NTAG213, MIFARE Ultralight, FeliCa)."
+        },
+        "hasNdef": {
+          "type": "boolean",
+          "description": "Whether the tag has active formatted NDEF records."
+        },
+        "records": {
+          "type": "array",
+          "description": "Array of NDEF records stored on this tag.",
+          "items": {
+            "$ref": "#/$defs/NdefRecord"
+          }
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional user notes or remarks."
+        }
+      }
+    },
+    "TextRecord": {
+      "type": "object",
+      "title": "TextRecord",
+      "description": "NDEF Well-Known Text record (T).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "recordType",
+        "data"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique identifier for this record."
+        },
+        "recordType": {
+          "type": "string",
+          "const": "text",
+          "description": "Record type discriminator for text."
+        },
+        "data": {
+          "type": "string",
+          "description": "Text payload content."
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code (e.g. ja, en)."
+        },
+        "encoding": {
+          "type": "string",
+          "description": "Text character encoding (e.g. utf-8)."
+        }
+      }
+    },
+    "UrlRecord": {
+      "type": "object",
+      "title": "UrlRecord",
+      "description": "NDEF Well-Known URI/URL record (U).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "recordType",
+        "data"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique identifier for this record."
+        },
+        "recordType": {
+          "type": "string",
+          "const": "url",
+          "description": "Record type discriminator for URI/URL."
+        },
+        "data": {
+          "type": "string",
+          "description": "Web URL or URI target string."
+        }
+      }
+    },
+    "MimeRecord": {
+      "type": "object",
+      "title": "MimeRecord",
+      "description": "NDEF MIME media type record.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "recordType",
+        "data",
+        "mediaType"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique identifier for this record."
+        },
+        "recordType": {
+          "type": "string",
+          "const": "mime",
+          "description": "Record type discriminator for MIME content."
+        },
+        "data": {
+          "type": "string",
+          "description": "MIME payload string (e.g. serialized JSON, vCard)."
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1,
+          "description": "IANA MIME media type specification (e.g. application/json, text/vcard)."
+        }
+      }
+    },
+    "EmptyRecord": {
+      "type": "object",
+      "title": "EmptyRecord",
+      "description": "NDEF Empty record.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "recordType"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique identifier for this record."
+        },
+        "recordType": {
+          "type": "string",
+          "const": "empty",
+          "description": "Record type discriminator for empty record."
+        },
+        "data": {
+          "type": "string",
+          "description": "Empty payload string (optional, typically empty string)."
+        }
+      }
+    },
+    "NdefRecord": {
+      "description": "Discriminated union of supported NDEF record types.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TextRecord"
+        },
+        {
+          "$ref": "#/$defs/UrlRecord"
+        },
+        {
+          "$ref": "#/$defs/MimeRecord"
+        },
+        {
+          "$ref": "#/$defs/EmptyRecord"
+        }
+      ]
+    }
+  }
+}

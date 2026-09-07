@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { NFCLog, NFCSettings, NFCTagItem, EditableNDEFRecord } from './types';
+import { normalizeUid, canonicalizeUid, isValidCanonicalUid } from './domain/uid';
+import { loadTagRegistry, saveTagRegistry, clearTagRegistry } from './storage/tagRegistryStorage';
+
+export { normalizeUid, canonicalizeUid, isValidCanonicalUid };
 
 const defaultSettings: NFCSettings = { vibrateOnScan: true };
 
@@ -136,12 +140,6 @@ export function getTagTypeHint(serialNumber?: string): string {
   if (byteCount === 8) return 'FeliCa / ISO 15693 (8-byte IDm/UID)';
   if (byteCount === 10) return 'Extended NFC (10-byte UID)';
   return `${byteCount}-byte UID NFC Tag`;
-}
-
-// Normalize UID for resilient case/separator-insensitive comparison
-export function normalizeUid(uid?: string): string {
-  if (!uid) return '';
-  return uid.trim().toLowerCase().replace(/[:-]/g, '');
 }
 
 // Convert raw Web NFC records into EditableNDEFRecord format
@@ -312,20 +310,8 @@ export const SAMPLE_NDEF_TEMPLATES: SampleTagTemplate[] = [
 ];
 
 export function useAppStore() {
-  // Tags collection keyed/distinguished by UID
-  const [tags, setTags] = useState<NFCTagItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('nfc_tags_registry');
-      if (saved) {
-        const parsed: NFCTagItem[] = JSON.parse(saved);
-        // Ensure sorted by lastRead DESC (most recently read at top)
-        return parsed.sort((a, b) => b.lastRead - a.lastRead);
-      }
-    } catch (e) {
-      console.error('Failed to load saved tags registry', e);
-    }
-    return [];
-  });
+  // Tags collection keyed/distinguished by canonical UID
+  const [tags, setTags] = useState<NFCTagItem[]>(() => loadTagRegistry());
 
   const [logs, setLogs] = useState<NFCLog[]>(() => {
     try {
@@ -357,13 +343,9 @@ export function useAppStore() {
   // Header visibility state (auto-hides on mobile when scrolling down to maximize scroll viewport)
   const [isHeaderVisible, setIsHeaderVisible] = useState<boolean>(true);
 
-  // Persist tags to localStorage (with error handling in case of storage quota)
+  // Persist tags to localStorage using unified storage abstraction
   useEffect(() => {
-    try {
-      localStorage.setItem('nfc_tags_registry', JSON.stringify(tags));
-    } catch (e) {
-      console.warn('localStorage quota warning for tags:', e);
-    }
+    saveTagRegistry(tags);
   }, [tags]);
 
   useEffect(() => {
@@ -383,7 +365,7 @@ export function useAppStore() {
     }
   }, [settings]);
 
-  // Record / Update a Tag by UID
+  // Record / Update a Tag by canonical UID
   const upsertTag = useCallback((params: {
     uid: string;
     records?: EditableNDEFRecord[];
@@ -393,17 +375,19 @@ export function useAppStore() {
     name?: string;
   }) => {
     const { uid, records, hasNdef, tagType, action = 'read', name } = params;
-    if (!uid || uid === 'Unknown Tag UID') return;
+    const canonicalUid = canonicalizeUid(uid);
+    if (!canonicalUid) return;
 
     const now = Date.now();
-    const calculatedTagType = tagType || getTagTypeHint(uid);
+    const calculatedTagType = tagType || getTagTypeHint(canonicalUid);
 
     setTags(prev => {
-      const existingIndex = prev.findIndex(t => t.uid.toLowerCase() === uid.toLowerCase());
+      const existingIndex = prev.findIndex(t => canonicalizeUid(t.uid) === canonicalUid);
       if (existingIndex >= 0) {
         const existing = prev[existingIndex];
         const updatedItem: NFCTagItem = {
           ...existing,
+          uid: canonicalUid,
           lastRead: now,
           readCount: (existing.readCount || 1) + 1,
           lastAction: action,
@@ -418,7 +402,7 @@ export function useAppStore() {
       } else {
         // New tag entry
         const newItem: NFCTagItem = {
-          uid,
+          uid: canonicalUid,
           name: name || '',
           firstSeen: now,
           lastRead: now,
@@ -434,42 +418,32 @@ export function useAppStore() {
   }, []);
 
   const updateTagName = useCallback((uid: string, name: string) => {
-    setTags(prev => prev.map(t => t.uid.toLowerCase() === uid.toLowerCase() ? { ...t, name } : t));
+    const canon = canonicalizeUid(uid);
+    setTags(prev => prev.map(t => canonicalizeUid(t.uid) === canon ? { ...t, name } : t));
   }, []);
 
   const updateTagNotes = useCallback((uid: string, notes: string) => {
-    setTags(prev => prev.map(t => t.uid.toLowerCase() === uid.toLowerCase() ? { ...t, notes } : t));
+    const canon = canonicalizeUid(uid);
+    setTags(prev => prev.map(t => canonicalizeUid(t.uid) === canon ? { ...t, notes } : t));
   }, []);
 
   const deleteTag = useCallback((uid: string) => {
-    setTags(prev => prev.filter(t => t.uid.toLowerCase() !== uid.toLowerCase()));
+    const canon = canonicalizeUid(uid);
+    setTags(prev => prev.filter(t => canonicalizeUid(t.uid) !== canon));
   }, []);
 
   const clearAllTags = useCallback(() => {
+    clearTagRegistry();
     setTags([]);
-    try {
-      localStorage.removeItem('nfc_tags_registry');
-      localStorage.removeItem('nfc_connect_tags_v2');
-      localStorage.removeItem('nfc_tags');
-    } catch (e) {
-      console.warn('Failed to clear tags from localStorage', e);
-    }
   }, []);
 
   const importTagsRegistry = useCallback((newTags: NFCTagItem[]): { success: boolean; error?: string } => {
-    try {
-      // Validate storage quota write before updating React state
-      const serialized = JSON.stringify(newTags);
-      localStorage.setItem('nfc_tags_registry', serialized);
+    const res = saveTagRegistry(newTags);
+    if (res.success) {
       setTags(newTags);
       return { success: true };
-    } catch (err: any) {
-      console.error('Failed to persist imported tags registry:', err);
-      return { 
-        success: false, 
-        error: err?.message || 'ストレージの容量制限(QuotaExceededError)または書き込みエラーが発生しました。' 
-      };
     }
+    return { success: false, error: res.error };
   }, []);
 
   const isLegacyOrTaggedSample = (t: NFCTagItem) => {

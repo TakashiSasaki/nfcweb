@@ -23,7 +23,7 @@ import { APP_VERSION_TAG } from './version';
 import { useToast } from './toast';
 import { NTAG_LIMITS, SAMPLE_NDEF_TEMPLATES } from './store';
 import { Modal } from './Modal';
-import { buildTagRegistryExportV1, serializeExportDocument } from './data-transfer';
+import { buildTagRegistryExportV1, serializeExportDocument } from './data-format';
 
 interface DebugViewProps {
   store: any;
