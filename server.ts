@@ -1,48 +1,46 @@
-import express, { type Express } from 'express';
-import path from 'node:path';
-import { schemaRouter } from './src/server/schemaRouter';
+import {
+  createBaseApp,
+  createProductionApp,
+  createDevelopmentApp,
+  startProductionServer,
+  startDevelopmentServer,
+  resolveClientDistPath
+} from './src/server/app';
 
-export function createApp(): Express {
-  const app = express();
+// Backward-compatible exports
+export const createApp = createBaseApp;
+export const startServer = startProductionServer;
 
-  app.disable('x-powered-by');
+export {
+  createBaseApp,
+  createProductionApp,
+  createDevelopmentApp,
+  startProductionServer,
+  startDevelopmentServer,
+  resolveClientDistPath
+};
 
-  // Schema routes FIRST (must intercept /schemas requests before SPA or static middleware)
-  app.use('/schemas', schemaRouter);
+export default createProductionApp;
 
-  return app;
-}
+// Explicit mode detection:
+// 1. If --dev flag is passed or SERVER_MODE === 'development': run development server with Vite middleware.
+// 2. Otherwise (default for "npm start", Cloud Run container start, etc.): run production static server.
+// Does not rely on implicit NODE_ENV.
+const isDirectExecution = !process.env.VITEST && process.env.NODE_ENV !== 'test';
 
-export async function startServer() {
-  const app = createApp();
-  const PORT = Number(process.env.PORT) || 3000;
+if (isDirectExecution) {
+  const isDevMode = process.argv.includes('--dev') || process.env.SERVER_MODE === 'development';
 
-  if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
+  if (isDevMode) {
+    startDevelopmentServer().catch((err) => {
+      console.error('Failed to start development server:', err);
+      process.exit(1);
     });
-    app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    startProductionServer().catch((err) => {
+      console.error('Failed to start production server:', err);
+      process.exit(1);
     });
   }
-
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`NFCWeb server listening on port ${PORT}`);
-  });
-
-  return { app, server };
 }
 
-// Only launch standalone server if not in a testing environment
-if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
-  startServer().catch((err) => {
-    console.error('Failed to start server:', err);
-    process.exit(1);
-  });
-}
