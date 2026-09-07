@@ -18,6 +18,13 @@ import {
   countTags,
   sanitizeTag
 } from './tagRepository';
+import {
+  deleteTagTransactional,
+  clearAllTagsTransactional,
+  importRegistryTransactional,
+  replaceTagRegistryTransactional,
+  updateTagPhotoTransactional
+} from './transactionalOperations';
 
 export {
   getAllTags,
@@ -29,7 +36,12 @@ export {
   clearAllTags,
   replaceTagRegistry,
   countTags,
-  sanitizeTag
+  sanitizeTag,
+  deleteTagTransactional,
+  clearAllTagsTransactional,
+  importRegistryTransactional,
+  replaceTagRegistryTransactional,
+  updateTagPhotoTransactional
 };
 
 export const TAGS_STORAGE_KEY = 'nfc_tags_registry';

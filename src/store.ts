@@ -2,16 +2,17 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { NFCLog, NFCSettings, NFCTagItem, EditableNDEFRecord, PhotoUpdate } from './types';
 import { normalizeUid, canonicalizeUid, isValidCanonicalUid } from './domain/uid';
 import { 
-  loadTagRegistry, 
-  saveTagRegistry, 
-  clearTagRegistry, 
-  commitTagRegistry,
   getAllTags,
-  replaceTagRegistry,
-  clearAllTags as clearAllTagsFromDB,
-  deleteTag as deleteTagFromDB
-} from './storage/tagRegistryStorage';
-import { deletePhotoAsset, deletePhotoAssets } from './storage/photoAssetStorage';
+  saveTag,
+  saveAllTags,
+  sanitizeTag
+} from './storage/tagRepository';
+import {
+  deleteTagTransactional,
+  clearAllTagsTransactional,
+  importRegistryTransactional,
+  replaceTagRegistryTransactional
+} from './storage/transactionalOperations';
 import { applyTagPhotoUpdate } from './storage/tagPhotoMutation';
 import { performLegacyStorageMigration } from './storage/legacyTagRegistryMigration';
 
@@ -322,7 +323,7 @@ export const SAMPLE_NDEF_TEMPLATES: SampleTagTemplate[] = [
 
 export function useAppStore() {
   // Tags collection keyed/distinguished by canonical UID
-  const [tags, setTags] = useState<NFCTagItem[]>(() => loadTagRegistry());
+  const [tags, setTags] = useState<NFCTagItem[]>([]);
   const [isHydrated, setIsHydrated] = useState<boolean>(false);
 
   const [logs, setLogs] = useState<NFCLog[]>(() => {
@@ -360,9 +361,7 @@ export function useAppStore() {
         await performLegacyStorageMigration().catch(err => console.warn('Legacy migration notice:', err));
         const dbTags = await getAllTags();
         if (isMounted) {
-          if (dbTags.length > 0) {
-            setTags(dbTags);
-          }
+          setTags(dbTags);
           setIsHydrated(true);
         }
       } catch (err) {
@@ -377,14 +376,6 @@ export function useAppStore() {
       isMounted = false;
     };
   }, []);
-
-  // Auto-persist tag changes to IndexedDB once hydrated
-  useEffect(() => {
-    if (!isHydrated) return;
-    replaceTagRegistry(tags).catch(err => {
-      console.error('Failed to persist tags to IndexedDB:', err);
-    });
-  }, [tags, isHydrated]);
 
   useEffect(() => {
     try {
@@ -421,9 +412,12 @@ export function useAppStore() {
 
     setTags(prev => {
       const existingIndex = prev.findIndex(t => canonicalizeUid(t.uid) === canonicalUid);
+      let updatedItem: NFCTagItem;
+      let nextTags: NFCTagItem[];
+
       if (existingIndex >= 0) {
         const existing = prev[existingIndex];
-        const updatedItem: NFCTagItem = {
+        updatedItem = {
           ...existing,
           uid: canonicalUid,
           lastRead: now,
@@ -436,10 +430,10 @@ export function useAppStore() {
         };
         // Re-order: Move updated tag to the top
         const rest = prev.filter((_, idx) => idx !== existingIndex);
-        return [updatedItem, ...rest];
+        nextTags = [updatedItem, ...rest];
       } else {
         // New tag entry
-        const newItem: NFCTagItem = {
+        updatedItem = {
           uid: canonicalUid,
           name: name || '',
           firstSeen: now,
@@ -450,19 +444,43 @@ export function useAppStore() {
           hasNdef: hasNdef ?? (records && records.length > 0 ? true : false),
           records: records || []
         };
-        return [newItem, ...prev];
+        nextTags = [updatedItem, ...prev];
       }
+
+      saveTag(updatedItem).catch(err => {
+        console.error('Failed to save tag to IndexedDB:', err);
+      });
+
+      return nextTags;
     });
   }, []);
 
   const updateTagName = useCallback((uid: string, name: string) => {
     const canon = canonicalizeUid(uid);
-    setTags(prev => prev.map(t => canonicalizeUid(t.uid) === canon ? { ...t, name } : t));
+    if (!canon) return;
+    setTags(prev => {
+      const target = prev.find(t => canonicalizeUid(t.uid) === canon);
+      if (!target) return prev;
+      const updated: NFCTagItem = { ...target, name };
+      saveTag(updated).catch(err => {
+        console.error('Failed to update tag name in IndexedDB:', err);
+      });
+      return prev.map(t => canonicalizeUid(t.uid) === canon ? updated : t);
+    });
   }, []);
 
   const updateTagNotes = useCallback((uid: string, notes: string) => {
     const canon = canonicalizeUid(uid);
-    setTags(prev => prev.map(t => canonicalizeUid(t.uid) === canon ? { ...t, notes } : t));
+    if (!canon) return;
+    setTags(prev => {
+      const target = prev.find(t => canonicalizeUid(t.uid) === canon);
+      if (!target) return prev;
+      const updated: NFCTagItem = { ...target, notes };
+      saveTag(updated).catch(err => {
+        console.error('Failed to update tag notes in IndexedDB:', err);
+      });
+      return prev.map(t => canonicalizeUid(t.uid) === canon ? updated : t);
+    });
   }, []);
 
   const updateTagPhoto = useCallback(async (
@@ -484,56 +502,42 @@ export function useAppStore() {
     const canon = canonicalizeUid(uid);
     if (!canon) return;
 
-    const target = tags.find(t => canonicalizeUid(t.uid) === canon);
-    const candidateTags = tags.filter(t => canonicalizeUid(t.uid) !== canon);
-
-    setTags(candidateTags);
-    deleteTagFromDB(canon).catch(err => {
-      console.warn('Failed to delete tag from IndexedDB:', err);
+    setTags(prev => prev.filter(t => canonicalizeUid(t.uid) !== canon));
+    deleteTagTransactional(canon).catch(err => {
+      console.error('Failed to delete tag from IndexedDB:', err);
     });
-
-    if (target?.photoAssetId) {
-      deletePhotoAsset(target.photoAssetId).catch(err => {
-        console.warn('Failed to clean up deleted tag photo asset:', err);
-      });
-    }
-  }, [tags]);
+  }, []);
 
   const clearAllTags = useCallback(() => {
-    const assetIds = tags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id));
     setTags([]);
-    clearAllTagsFromDB().catch(err => {
-      console.warn('Failed to clear tags from IndexedDB:', err);
+    clearAllTagsTransactional().catch(err => {
+      console.error('Failed to clear tags from IndexedDB:', err);
+    });
+  }, []);
+
+  const importTagsRegistry = useCallback((newTags: NFCTagItem[], mode: 'replace' | 'merge' = 'replace'): { success: boolean; error?: string } => {
+    const sanitized = newTags.map(sanitizeTag);
+    importRegistryTransactional(sanitized, mode).catch(err => {
+      console.error('Failed to import tag registry to IndexedDB:', err);
     });
 
-    if (assetIds.length > 0) {
-      deletePhotoAssets(assetIds).catch(err => {
-        console.warn('Failed to clean up photo assets on clearAllTags:', err);
-      });
-    }
-  }, [tags]);
-
-  const importTagsRegistry = useCallback((newTags: NFCTagItem[]): { success: boolean; error?: string } => {
-    const previousAssetIds = new Set<string>(
-      tags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id))
-    );
-    const newAssetIds = new Set<string>(
-      newTags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id))
-    );
-    const unreferencedAssetIds: string[] = Array.from(previousAssetIds).filter((id: string) => !newAssetIds.has(id));
-
-    const result = commitTagRegistry(newTags, (persistedTags) => {
-      setTags(persistedTags);
-    });
-
-    if (result.success && unreferencedAssetIds.length > 0) {
-      deletePhotoAssets(unreferencedAssetIds).catch(err => {
-        console.warn('Failed to clean up unreferenced photo assets after import:', err);
+    if (mode === 'replace') {
+      setTags(sanitized.sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0)));
+    } else {
+      setTags(prev => {
+        const map = new Map<string, NFCTagItem>();
+        for (const t of prev) {
+          map.set(canonicalizeUid(t.uid), t);
+        }
+        for (const t of sanitized) {
+          map.set(canonicalizeUid(t.uid), t);
+        }
+        return Array.from(map.values()).sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0));
       });
     }
 
-    return result;
-  }, [tags]);
+    return { success: true };
+  }, []);
 
   const isLegacyOrTaggedSample = (t: NFCTagItem) => {
     if (t.isSample) return true;
@@ -551,19 +555,11 @@ export function useAppStore() {
   };
 
   const clearSampleTags = useCallback(() => {
-    const sampleTags = tags.filter(isLegacyOrTaggedSample);
-    const sampleAssetIds = sampleTags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id));
-    const candidateTags = tags.filter(t => !isLegacyOrTaggedSample(t));
-
-    const result = commitTagRegistry(candidateTags, (persistedTags) => {
-      setTags(persistedTags);
+    const nonSampleTags = tags.filter(t => !isLegacyOrTaggedSample(t));
+    setTags(nonSampleTags);
+    replaceTagRegistryTransactional(nonSampleTags).catch(err => {
+      console.error('Failed to replace tag registry in IndexedDB:', err);
     });
-
-    if (result.success && sampleAssetIds.length > 0) {
-      deletePhotoAssets(sampleAssetIds).catch(err => {
-        console.warn('Failed to clean up sample photo assets:', err);
-      });
-    }
   }, [tags]);
 
   // Developer utility to seed mock tags for stress-testing and multi-record validation
@@ -711,7 +707,13 @@ export function useAppStore() {
       }
     }
 
-    setTags(prev => [...generated, ...prev].sort((a, b) => b.lastRead - a.lastRead));
+    setTags(prev => {
+      const combined = [...generated, ...prev].sort((a, b) => b.lastRead - a.lastRead);
+      saveAllTags(generated).catch(err => {
+        console.error('Failed to save seeded mock tags to IndexedDB:', err);
+      });
+      return combined;
+    });
   }, []);
 
   const addLog = useCallback((log: Omit<NFCLog, 'id' | 'timestamp'>) => {

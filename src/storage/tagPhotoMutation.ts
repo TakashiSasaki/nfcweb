@@ -10,7 +10,7 @@ export interface ApplyTagPhotoUpdateOptions {
   commitRegistry?: (
     candidateTags: readonly NFCTagItem[],
     applyStateUpdate?: (persisted: NFCTagItem[]) => void
-  ) => StorageOperationResult;
+  ) => Promise<StorageOperationResult> | StorageOperationResult;
   deletePhotoAssetFn?: (assetId: string) => Promise<void>;
   onCommit?: (persistedTags: NFCTagItem[]) => void;
 }
@@ -111,7 +111,7 @@ export async function applyTagPhotoUpdate(
   });
 
   let committedTags: NFCTagItem[] | undefined;
-  const commitResult = commitRegistry(candidateTags, (persisted) => {
+  const commitResult = await commitRegistry(candidateTags, (persisted) => {
     committedTags = persisted;
     if (onCommit) {
       onCommit(persisted);
