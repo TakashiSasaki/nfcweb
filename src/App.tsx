@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Radio, ArrowLeft, XCircle, Loader2, Menu } from 'lucide-react';
+import { Radio, ArrowLeft, XCircle, Loader2, Menu, Search } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAppStore } from './store';
 import { TagsInfiniteListView } from './TagsInfiniteListView';
@@ -9,8 +9,8 @@ import { NavigationDrawer } from './NavigationDrawer';
 import { ExportModal } from './ExportModal';
 import { ImportModal } from './ImportModal';
 import { DataSchemaModal } from './DataSchemaModal';
+import { SearchModal } from './SearchModal';
 import { usePWAUpdate } from './usePWAUpdate';
-import { APP_VERSION_TAG } from './version';
 import { ToastProvider, useToast } from './toast';
 
 function AppContent() {
@@ -83,22 +83,32 @@ function AppContent() {
             <div className="w-8 h-8 rounded-lg bg-slate-800 group-hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-300 group-hover:text-cyan-300 shadow-sm transition-colors">
               <Menu className="w-4 h-4" />
             </div>
-            <div className="flex flex-col min-w-0 leading-tight">
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-sm font-bold tracking-tight text-white whitespace-nowrap">
-                  NFC Connect
-                </h1>
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-blue-500/20 text-cyan-300 border border-blue-500/30">
-                  {APP_VERSION_TAG}
-                </span>
-              </div>
-              <span className="text-[10px] text-slate-400 font-medium">メニュー</span>
-            </div>
+            <h1 className="text-sm font-bold tracking-tight text-white whitespace-nowrap">
+              NFC Connect
+            </h1>
           </button>
         </div>
 
-        {/* Right: Primary Scan Action */}
+        {/* Right: Search & Primary Scan Action */}
         <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Search Icon Button */}
+          <button
+            type="button"
+            onClick={() => store.openSearchModal()}
+            className={`relative flex items-center justify-center w-8 h-8 rounded-xl transition-all cursor-pointer border ${
+              store.searchQuery
+                ? 'bg-blue-600/30 text-cyan-300 border-blue-500/50 shadow-sm shadow-blue-500/20'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+            }`}
+            title={store.searchQuery ? `検索中: "${store.searchQuery}" (クリックで変更/解除)` : 'タグを検索 (Search)'}
+            aria-label="Search NFC tags"
+          >
+            <Search className="w-4 h-4" />
+            {store.searchQuery && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-cyan-400 rounded-full ring-2 ring-slate-900 animate-pulse" />
+            )}
+          </button>
+
           {store.isScanning ? (
             <div className="flex items-center gap-2">
               <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-blue-950/90 border border-blue-500/40 rounded-xl text-xs text-blue-300 font-medium animate-pulse">
@@ -202,9 +212,17 @@ function AppContent() {
         onOpenImport={() => setIsImportOpen(true)}
         onOpenDataSchema={() => setIsDataSchemaOpen(true)}
         onOpenQRModal={() => setShowQRModal(true)}
+        onOpenSearch={() => store.openSearchModal()}
         onSeedSamples={() => store.seedMockTags(20)}
         tagsCount={store.tags.length}
         isScanning={store.isScanning}
+      />
+
+      {/* Search Modal */}
+      <SearchModal
+        isOpen={store.isSearchModalOpen}
+        onClose={store.closeSearchModal}
+        store={store}
       />
 
       {/* Export Modal */}

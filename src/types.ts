@@ -70,6 +70,7 @@ export interface NFCTagItem {
   records: EditableNDEFRecord[];
   notes?: string;
   isSample?: boolean; // Distinguishes simulated/mock sample tags from physically scanned tags
+  photoUrl?: string; // Optional item photo URL or thumbnail (future-ready presentation)
 }
 
 export interface NFCSettings {

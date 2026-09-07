@@ -57,8 +57,6 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
     searchQuery,
     setSearchQuery,
     openSearchModal,
-    recordFilter,
-    setRecordFilter,
     isScanning,
     startScanning: storeStartScanning,
     stopScanning
@@ -418,18 +416,10 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
   }, [stopScanning, stopSafeErase, stopSafeWrite]);
 
   // ----------------------------------------------------
-  // Filtering & Pagination
+  // Search & Pagination
   // ----------------------------------------------------
   const filteredTags = useMemo(() => {
     let result = tags as NFCTagItem[];
-
-    if (recordFilter === 'multi') {
-      result = result.filter(t => t.records && t.records.length > 1);
-    } else if (recordFilter === 'single') {
-      result = result.filter(t => t.records && t.records.length === 1);
-    } else if (recordFilter === 'empty') {
-      result = result.filter(t => !t.records || t.records.length === 0 || !t.hasNdef);
-    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
@@ -444,11 +434,11 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
     }
 
     return [...result].sort((a, b) => b.lastRead - a.lastRead);
-  }, [tags, recordFilter, searchQuery]);
+  }, [tags, searchQuery]);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [searchQuery, recordFilter]);
+  }, [searchQuery]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -505,14 +495,6 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
     return analyzeNTAGCapacity(editRecords);
   }, [editRecords]);
 
-  // Filter counts for segmented filter chips
-  const totalCount = tags.length;
-  const multiCount = useMemo(() => tags.filter((t: NFCTagItem) => t.records && t.records.length > 1).length, [tags]);
-  const singleCount = useMemo(() => tags.filter((t: NFCTagItem) => t.records && t.records.length === 1).length, [tags]);
-  const emptyCount = useMemo(() => tags.filter((t: NFCTagItem) => !t.records || t.records.length === 0 || !t.hasNdef).length, [tags]);
-
-  const isFilteringActive = searchQuery.trim().length > 0 || recordFilter !== 'all';
-
   return (
     <div className="flex flex-col h-full bg-[#0F172A] rounded-none border-0 overflow-hidden shadow-none w-full">
       
@@ -536,100 +518,36 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
         </div>
       )}
 
-      {/* Unified, Modern Search & Filter Bar (Single source of filtering) */}
-      <div className="p-2.5 sm:p-3.5 border-b border-slate-800 bg-slate-900/90 flex-shrink-0 space-y-2">
-        {/* Search Input */}
-        <div className="relative w-full">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="タグ名、UID、NDEFデータで検索..."
-            className="w-full bg-[#0B1120] border border-slate-700/80 rounded-xl pl-9 pr-9 py-2 text-xs sm:text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all"
-          />
-          {searchQuery && (
+      {/* Active Search Query Indicator (Only shown when a search is active via header search button) */}
+      {searchQuery.trim().length > 0 && (
+        <div className="px-3 py-2 bg-blue-950/70 border-b border-blue-900/50 flex items-center justify-between text-xs text-slate-200 flex-shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Search className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+            <span className="truncate">
+              検索条件: <span className="font-semibold text-white">"{searchQuery}"</span>
+              <span className="text-slate-400 ml-1.5 font-mono">({filteredTags.length}件)</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+            <button
+              type="button"
+              onClick={openSearchModal}
+              className="text-[11px] text-cyan-300 hover:text-white px-2 py-0.5 rounded bg-blue-900/40 hover:bg-blue-800/60 border border-blue-500/30 transition-colors cursor-pointer"
+            >
+              条件変更
+            </button>
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
-              title="検索ワードをクリア"
-              aria-label="Clear search"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Filter Chips / Categories */}
-        <div className="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar py-0.5">
-          <div className="flex items-center gap-1.5 flex-nowrap">
-            <button
-              type="button"
-              onClick={() => setRecordFilter('all')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer border ${
-                recordFilter === 'all'
-                  ? 'bg-blue-600/25 text-cyan-300 border-blue-500/50 shadow-sm font-semibold'
-                  : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700/70 hover:bg-slate-700/60'
-              }`}
-            >
-              すべて <span className="font-mono text-[10px] ml-0.5 opacity-80">({totalCount})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setRecordFilter('single')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer border ${
-                recordFilter === 'single'
-                  ? 'bg-indigo-600/25 text-indigo-300 border-indigo-500/50 shadow-sm font-semibold'
-                  : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700/70 hover:bg-slate-700/60'
-              }`}
-            >
-              単一レコード <span className="font-mono text-[10px] ml-0.5 opacity-80">({singleCount})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setRecordFilter('multi')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer border ${
-                recordFilter === 'multi'
-                  ? 'bg-cyan-600/25 text-cyan-300 border-cyan-500/50 shadow-sm font-semibold'
-                  : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700/70 hover:bg-slate-700/60'
-              }`}
-            >
-              複数レコード <span className="font-mono text-[10px] ml-0.5 opacity-80">({multiCount})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setRecordFilter('empty')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer border ${
-                recordFilter === 'empty'
-                  ? 'bg-amber-600/25 text-amber-300 border-amber-500/50 shadow-sm font-semibold'
-                  : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700/70 hover:bg-slate-700/60'
-              }`}
-            >
-              空 / IDのみ <span className="font-mono text-[10px] ml-0.5 opacity-80">({emptyCount})</span>
-            </button>
-          </div>
-
-          {/* Reset button when filter or search is active */}
-          {isFilteringActive && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery('');
-                setRecordFilter('all');
-              }}
-              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white bg-slate-800/90 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors whitespace-nowrap cursor-pointer ml-1 flex-shrink-0"
-              title="検索と絞り込みをリセット"
+              className="flex items-center gap-0.5 text-[11px] text-slate-400 hover:text-white px-1.5 py-0.5 rounded hover:bg-slate-800 transition-colors cursor-pointer"
+              title="検索を解除"
             >
               <X className="w-3 h-3" />
-              <span>リセット</span>
+              <span>解除</span>
             </button>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Infinite Scroll Container - Edge-to-edge on mobile with onScroll direction listener */}
       <div 
@@ -642,26 +560,35 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
             <div className="w-14 h-14 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mb-3">
               <Radio className="w-7 h-7 text-slate-500 opacity-60" />
             </div>
-            <p className="text-sm font-semibold text-slate-300">No NFC tag cards found</p>
+            <p className="text-sm font-semibold text-slate-300">No NFC inventory items found</p>
             <p className="text-xs text-slate-500 mt-1 max-w-sm leading-relaxed">
               {searchQuery 
-                ? 'No tags matching your search query. Try clearing the search term.'
-                : 'Tap "Scan NFC Tag" above and hold a tag near your phone to automatically register its card here.'}
+                ? '検索条件に一致するタグが見つかりませんでした。条件を変更またはクリアしてください。'
+                : 'Tap "Scan NFC Tag" above and hold a tag near your phone to automatically register its item here.'}
             </p>
+            {searchQuery && tags.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="mt-3 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-medium border border-slate-700 transition-colors cursor-pointer shadow-sm"
+              >
+                検索条件をクリア
+              </button>
+            )}
             {tags.length === 0 && (
               <button
                 type="button"
                 onClick={() => seedMockTags(20)}
-                className="mt-4 flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-md transition-colors"
+                className="mt-4 flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-semibold shadow-md transition-colors cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Load Sample Tags (20 cards)</span>
+                <span>Load Sample Inventory (20 items)</span>
               </button>
             )}
           </div>
         ) : (
           <>
-            {/* Tag Cards Vertically Stacked with Mobile Swipe & Desktop See-Through (透視) */}
+            {/* Compact inventory list items with progressive disclosure and photo readiness */}
             {currentlyRenderedTags.map((tag: NFCTagItem) => (
               <TagCardItem
                 key={tag.uid}

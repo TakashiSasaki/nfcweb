@@ -14,7 +14,8 @@ import {
   QrCode,
   Clock,
   Info,
-  FileCode
+  FileCode,
+  Search
 } from 'lucide-react';
 import { APP_VERSION_TAG } from './version';
 
@@ -27,6 +28,7 @@ export interface NavigationDrawerProps {
   onOpenImport: () => void;
   onOpenDataSchema: () => void;
   onOpenQRModal: () => void;
+  onOpenSearch?: () => void;
   onSeedSamples?: () => void;
   tagsCount: number;
   isScanning: boolean;
@@ -41,6 +43,7 @@ export function NavigationDrawer({
   onOpenImport,
   onOpenDataSchema,
   onOpenQRModal,
+  onOpenSearch,
   onSeedSamples,
   tagsCount,
   isScanning
@@ -86,8 +89,8 @@ export function NavigationDrawer({
         {/* Top Section */}
         <div className="p-4 sm:p-5 space-y-5">
           
-          {/* Drawer Header */}
-          <div className="flex items-center justify-between pb-3.5 border-b border-slate-700/70">
+          {/* Drawer Header (Sticky top so title and close button remain visible when scrolling) */}
+          <div className="sticky top-0 z-20 -mx-4 -mt-4 sm:-mx-5 sm:-mt-5 px-4 sm:px-5 py-3.5 bg-[#1E293B]/95 backdrop-blur-md border-b border-slate-700/80 flex items-center justify-between shadow-md shadow-black/20">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md shadow-blue-500/25 flex-shrink-0">
                 <Radio className="w-5 h-5 text-white" />
@@ -108,10 +111,11 @@ export function NavigationDrawer({
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 shadow-sm transition-colors cursor-pointer flex-shrink-0"
               aria-label="Close navigation menu"
+              title="メニューを閉じる"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 text-slate-300 hover:text-white transition-colors" />
             </button>
           </div>
 
@@ -160,6 +164,22 @@ export function NavigationDrawer({
               </div>
               <span className="text-[10px] font-mono text-slate-500">#/debug</span>
             </button>
+
+            {onOpenSearch && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenSearch();
+                }}
+                className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800/80 hover:text-white transition-all cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <Search className="w-4 h-4 text-cyan-400" />
+                  <span>タグを検索 (Search)</span>
+                </div>
+              </button>
+            )}
           </div>
 
           {/* Data Management Section */}

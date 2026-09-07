@@ -337,9 +337,6 @@ export function useAppStore() {
   const openSearchModal = useCallback(() => setIsSearchModalOpen(true), []);
   const closeSearchModal = useCallback(() => setIsSearchModalOpen(false), []);
 
-  // Global Record Filter state (for header dropdown filter)
-  const [recordFilter, setRecordFilter] = useState<'all' | 'multi' | 'single' | 'empty'>('all');
-
   // Header visibility state (auto-hides on mobile when scrolling down to maximize scroll viewport)
   const [isHeaderVisible, setIsHeaderVisible] = useState<boolean>(true);
 
@@ -525,19 +522,40 @@ export function useAppStore() {
       'Exhibition Hall Guide Key'
     ];
 
+    // Fixtures for testing photo readiness:
+    // 0: square SVG (laptop)
+    // 1: portrait 3:4 SVG (access badge / sign)
+    // 2: landscape 16:9 SVG (digital card)
+    // 3: square SVG (tool/equipment)
+    // 4: square SVG (key/room point)
+    // 5: broken URL to verify onError fallback
+    // 6+: undefined to verify no-photo quiet state
+    const samplePhotos = [
+      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%231e293b"/><rect x="22" y="24" width="56" height="38" rx="4" fill="%230284c7"/><path d="M14 68 h72 a4 4 0 0 1 4 4 v2 H10 v-2 a4 4 0 0 1 4 -4 z" fill="%2394a3b8"/></svg>',
+      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="75" height="100" viewBox="0 0 75 100"><rect width="75" height="100" fill="%23312e81"/><circle cx="37.5" cy="38" r="18" fill="%23818cf8"/><path d="M15 88 C15 65 60 65 60 88 Z" fill="%23818cf8"/></svg>',
+      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90" viewBox="0 0 160 90"><rect width="160" height="90" fill="%231e1b4b"/><rect x="20" y="20" width="120" height="50" rx="6" fill="%23a78bfa"/><circle cx="50" cy="45" r="12" fill="%23c4b5fd"/><rect x="70" y="38" width="50" height="6" rx="2" fill="%23e0e7ff"/><rect x="70" y="48" width="35" height="4" rx="2" fill="%23c4b5fd"/></svg>',
+      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%2378350f"/><path d="M28 72 L65 35 M58 28 L72 42" stroke="%23fbbf24" stroke-width="8" stroke-linecap="round"/></svg>',
+      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%230f766e"/><circle cx="50" cy="50" r="28" fill="%232dd4bf"/><path d="M42 50 h16 M50 42 v16" stroke="%23042f2e" stroke-width="4" stroke-linecap="round"/></svg>',
+      'https://example.invalid/broken-thumbnail-test.jpg'
+    ];
+
     for (let i = 0; i < count; i++) {
       const hexUid = Array.from({ length: 7 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join(':');
       const timeOffset = (count - i) * 60000;
       const scenario = i % 4; // 0, 1 = Multi-record (50%), 2 = Single record (25%), 3 = Empty/ID-Only (25%)
+      const photoUrl = i < samplePhotos.length ? samplePhotos[i] : undefined;
 
       if (scenario === 0 || scenario === 1) {
         // Multi-Record Sample Tag
         const tpl = multiRecordTemplates[i % multiRecordTemplates.length];
         const recs = tpl.records(i);
+        const name = i === 0 
+          ? 'Office Asset Tag #1: High-Precision CNC Calibrator Unit' 
+          : `${tpl.name} #${i + 1}`;
 
         generated.push({
           uid: hexUid,
-          name: `${tpl.name} #${i + 1}`,
+          name,
           firstSeen: now - timeOffset - 3600000,
           lastRead: now - timeOffset,
           readCount: Math.floor(Math.random() * 6) + 1,
@@ -546,7 +564,8 @@ export function useAppStore() {
           hasNdef: true,
           records: recs,
           notes: `Multi-record sample (${recs.length} NDEF records)`,
-          isSample: true
+          isSample: true,
+          photoUrl
         });
       } else if (scenario === 2) {
         // Single Record Sample Tag
@@ -574,7 +593,8 @@ export function useAppStore() {
               lang: 'ja'
             }
           ],
-          isSample: true
+          isSample: true,
+          photoUrl
         });
       } else {
         // Empty / Unformatted ID-Only Tag
@@ -589,7 +609,8 @@ export function useAppStore() {
           hasNdef: false,
           records: [],
           notes: 'Unformatted / ID-only hardware tag',
-          isSample: true
+          isSample: true,
+          photoUrl
         });
       }
     }
@@ -728,8 +749,6 @@ export function useAppStore() {
     setIsSearchModalOpen,
     openSearchModal,
     closeSearchModal,
-    recordFilter,
-    setRecordFilter,
     isHeaderVisible,
     setIsHeaderVisible,
     isScanning,
