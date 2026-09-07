@@ -33,7 +33,7 @@ describe('TagCardItem Component Rendering & Interaction Tests', () => {
     onSaveName: vi.fn(),
     onOpenSafeWrite: vi.fn(),
     onOpenSafeErase: vi.fn(),
-    onDeleteTag: vi.fn(),
+    onDeleteTag: vi.fn().mockResolvedValue({ success: true }),
     onShowInfo: vi.fn(),
   };
 
@@ -48,27 +48,17 @@ describe('TagCardItem Component Rendering & Interaction Tests', () => {
     globalThis.URL.revokeObjectURL = mockRevoke;
   });
 
-  afterEach(() => {
-    cleanup();
-  });
+  afterEach(() => cleanup());
 
   describe('Thumbnail & Photo Lifecycle', () => {
     it('renders fallback icon when no photoUrl or thumbnailUrl is present', () => {
       render(<TagCardItem {...defaultProps} />);
-      
-      const fallback = screen.getByTestId('tag-photo-fallback');
-      expect(fallback).not.toBeNull();
+      expect(screen.getByTestId('tag-photo-fallback')).not.toBeNull();
       expect(screen.queryByTestId('tag-photo-img')).toBeNull();
     });
 
     it('renders image when photoUrl is provided', () => {
-      const tagWithPhoto: NFCTagItem = {
-        ...baseTag,
-        photoUrl: 'https://example.com/photos/asset1.png'
-      };
-
-      render(<TagCardItem {...defaultProps} tag={tagWithPhoto} />);
-
+      render(<TagCardItem {...defaultProps} tag={{ ...baseTag, photoUrl: 'https://example.com/photos/asset1.png' }} />);
       const img = screen.getByTestId('tag-photo-img') as HTMLImageElement;
       expect(img).not.toBeNull();
       expect(img.src).toBe('https://example.com/photos/asset1.png');
@@ -76,43 +66,17 @@ describe('TagCardItem Component Rendering & Interaction Tests', () => {
     });
 
     it('falls back to placeholder when image fails to load (onError)', () => {
-      const tagWithBrokenPhoto: NFCTagItem = {
-        ...baseTag,
-        photoUrl: 'https://broken.invalid/missing.jpg'
-      };
-
-      render(<TagCardItem {...defaultProps} tag={tagWithBrokenPhoto} />);
-
-      const img = screen.getByTestId('tag-photo-img');
-      fireEvent.error(img);
-
-      // After error, fallback icon must be rendered
+      render(<TagCardItem {...defaultProps} tag={{ ...baseTag, photoUrl: 'https://broken.invalid/missing.jpg' }} />);
+      fireEvent.error(screen.getByTestId('tag-photo-img'));
       expect(screen.getByTestId('tag-photo-fallback')).not.toBeNull();
       expect(screen.queryByTestId('tag-photo-img')).toBeNull();
     });
 
     it('resets image error when photo prop updates with a new URL', () => {
-      const { rerender } = render(
-        <TagCardItem 
-          {...defaultProps} 
-          tag={{ ...baseTag, photoUrl: 'https://broken.invalid/missing.jpg' }} 
-        />
-      );
-
-      // Trigger error on initial image
-      const img = screen.getByTestId('tag-photo-img');
-      fireEvent.error(img);
+      const { rerender } = render(<TagCardItem {...defaultProps} tag={{ ...baseTag, photoUrl: 'https://broken.invalid/missing.jpg' }} />);
+      fireEvent.error(screen.getByTestId('tag-photo-img'));
       expect(screen.getByTestId('tag-photo-fallback')).not.toBeNull();
-
-      // Update prop to new valid photo
-      rerender(
-        <TagCardItem 
-          {...defaultProps} 
-          tag={{ ...baseTag, photoUrl: 'https://valid.site/new-photo.jpg' }} 
-        />
-      );
-
-      // Error state should have reset, rendering new image
+      rerender(<TagCardItem {...defaultProps} tag={{ ...baseTag, photoUrl: 'https://valid.site/new-photo.jpg' }} />);
       const newImg = screen.getByTestId('tag-photo-img') as HTMLImageElement;
       expect(newImg).not.toBeNull();
       expect(newImg.src).toBe('https://valid.site/new-photo.jpg');
@@ -123,20 +87,16 @@ describe('TagCardItem Component Rendering & Interaction Tests', () => {
   describe('Inventory Row Presentation', () => {
     it('displays tag name and primary record content', () => {
       render(<TagCardItem {...defaultProps} />);
-
       expect(screen.getByText('Asset Alpha')).not.toBeNull();
       expect(screen.getByText('https://example.com/item/100')).not.toBeNull();
-      // Multi-record badge (+1 more)
       expect(screen.getByText('+1 more')).not.toBeNull();
     });
 
     it('calls onCopyUid when copy button is clicked', () => {
       render(<TagCardItem {...defaultProps} />);
-
       const copyButtons = screen.getAllByRole('button', { name: /Copy UID/i });
       expect(copyButtons.length).toBeGreaterThan(0);
       fireEvent.click(copyButtons[0]);
-
       expect(defaultProps.onCopyUid).toHaveBeenCalledWith(baseTag.uid, expect.anything());
     });
   });
@@ -144,10 +104,7 @@ describe('TagCardItem Component Rendering & Interaction Tests', () => {
   describe('Primary Action (Write)', () => {
     it('invokes onOpenSafeWrite when Write button is clicked', () => {
       render(<TagCardItem {...defaultProps} />);
-
-      const writeButton = screen.getByTestId('tag-action-write');
-      fireEvent.click(writeButton);
-
+      fireEvent.click(screen.getByTestId('tag-action-write'));
       expect(defaultProps.onOpenSafeWrite).toHaveBeenCalledWith(baseTag);
     });
   });
@@ -155,17 +112,11 @@ describe('TagCardItem Component Rendering & Interaction Tests', () => {
   describe('Progressive Disclosure (Details Drawer)', () => {
     it('toggles details drawer when disclosure button is clicked', () => {
       render(<TagCardItem {...defaultProps} />);
-
       const toggleButton = screen.getByTestId('tag-details-toggle');
       expect(toggleButton.getAttribute('aria-expanded')).toBe('false');
-
-      // Expand
       fireEvent.click(toggleButton);
       expect(toggleButton.getAttribute('aria-expanded')).toBe('true');
-      // Deep technical section is visible
       expect(screen.getByText(/ISO\/IEC 14443 Type 2/i)).not.toBeNull();
-
-      // Collapse
       fireEvent.click(toggleButton);
       expect(toggleButton.getAttribute('aria-expanded')).toBe('false');
     });
@@ -174,105 +125,79 @@ describe('TagCardItem Component Rendering & Interaction Tests', () => {
   describe('Overflow Actions Menu (⋯)', () => {
     it('opens overflow dropdown and triggers Safe Erase callback', () => {
       render(<TagCardItem {...defaultProps} />);
-
       const menuButton = screen.getByTestId('tag-overflow-menu-button');
       expect(screen.queryByTestId('tag-overflow-menu')).toBeNull();
-
-      // Open menu
       fireEvent.click(menuButton);
-      const menu = screen.getByTestId('tag-overflow-menu');
-      expect(menu).not.toBeNull();
-
-      // Click Safe Erase in menu
-      const eraseButton = screen.getByRole('menuitem', { name: /Erase/i });
-      fireEvent.click(eraseButton);
-
+      expect(screen.getByTestId('tag-overflow-menu')).not.toBeNull();
+      fireEvent.click(screen.getByRole('menuitem', { name: /Erase/i }));
       expect(defaultProps.onOpenSafeErase).toHaveBeenCalledWith(baseTag);
-      // Menu should automatically close after selection
       expect(screen.queryByTestId('tag-overflow-menu')).toBeNull();
     });
 
     it('triggers onStartEditName callback from overflow menu', () => {
       render(<TagCardItem {...defaultProps} />);
-
-      const menuButton = screen.getByTestId('tag-overflow-menu-button');
-      fireEvent.click(menuButton);
-
-      const renameButton = screen.getByRole('menuitem', { name: /Rename/i });
-      fireEvent.click(renameButton);
-
+      fireEvent.click(screen.getByTestId('tag-overflow-menu-button'));
+      fireEvent.click(screen.getByRole('menuitem', { name: /Rename/i }));
       expect(defaultProps.onStartEditName).toHaveBeenCalledWith(baseTag, expect.anything());
     });
 
-    it('triggers onDeleteTag callback from overflow menu', () => {
-      render(<TagCardItem {...defaultProps} />);
+    it('waits for durable delete success before showing removal feedback', async () => {
+      const onDeleteTag = vi.fn().mockResolvedValue({ success: true });
+      const onShowInfo = vi.fn();
+      render(<TagCardItem {...defaultProps} onDeleteTag={onDeleteTag} onShowInfo={onShowInfo} />);
 
-      const menuButton = screen.getByTestId('tag-overflow-menu-button');
-      fireEvent.click(menuButton);
+      fireEvent.click(screen.getByTestId('tag-overflow-menu-button'));
+      fireEvent.click(screen.getByRole('menuitem', { name: /Remove from list/i }));
 
-      const deleteButton = screen.getByRole('menuitem', { name: /Remove from list/i });
-      fireEvent.click(deleteButton);
+      expect(onDeleteTag).toHaveBeenCalledWith(baseTag.uid);
+      await waitFor(() => {
+        expect(onShowInfo).toHaveBeenCalledWith('Item Removed', expect.stringContaining(baseTag.uid));
+      });
+    });
 
-      expect(defaultProps.onDeleteTag).toHaveBeenCalledWith(baseTag.uid);
-      expect(defaultProps.onShowInfo).toHaveBeenCalledWith('Item Removed', expect.stringContaining(baseTag.uid));
+    it('does not show removal success when durable delete fails', async () => {
+      const onDeleteTag = vi.fn().mockResolvedValue({ success: false, error: 'database unavailable' });
+      const onShowInfo = vi.fn();
+      render(<TagCardItem {...defaultProps} onDeleteTag={onDeleteTag} onShowInfo={onShowInfo} />);
+
+      fireEvent.click(screen.getByTestId('tag-overflow-menu-button'));
+      fireEvent.click(screen.getByRole('menuitem', { name: /Remove from list/i }));
+
+      await waitFor(() => {
+        expect(onShowInfo).toHaveBeenCalledWith('Remove Error', 'database unavailable');
+      });
+      expect(onShowInfo).not.toHaveBeenCalledWith('Item Removed', expect.anything());
     });
 
     it('closes overflow menu when Escape key is pressed', () => {
       render(<TagCardItem {...defaultProps} />);
-
-      const menuButton = screen.getByTestId('tag-overflow-menu-button');
-      fireEvent.click(menuButton);
+      fireEvent.click(screen.getByTestId('tag-overflow-menu-button'));
       expect(screen.getByTestId('tag-overflow-menu')).not.toBeNull();
-
       fireEvent.keyDown(document, { key: 'Escape' });
       expect(screen.queryByTestId('tag-overflow-menu')).toBeNull();
     });
 
     it('renders Add photo option in overflow menu when no photo is attached', () => {
       render(<TagCardItem {...defaultProps} />);
-
-      const menuButton = screen.getByTestId('tag-overflow-menu-button');
-      fireEvent.click(menuButton);
-
+      fireEvent.click(screen.getByTestId('tag-overflow-menu-button'));
       expect(screen.getByRole('menuitem', { name: /Add photo/i })).not.toBeNull();
     });
 
     it('renders Change photo and Remove photo options in overflow menu when photo is attached', () => {
-      const onUpdatePhoto = vi.fn();
-      render(
-        <TagCardItem 
-          {...defaultProps} 
-          onUpdatePhoto={onUpdatePhoto}
-          tag={{ ...baseTag, photoUrl: 'https://example.com/asset.jpg' }} 
-        />
-      );
-
-      const menuButton = screen.getByTestId('tag-overflow-menu-button');
-      fireEvent.click(menuButton);
-
+      const onUpdatePhoto = vi.fn().mockResolvedValue({ success: true });
+      render(<TagCardItem {...defaultProps} onUpdatePhoto={onUpdatePhoto} tag={{ ...baseTag, photoUrl: 'https://example.com/asset.jpg' }} />);
+      fireEvent.click(screen.getByTestId('tag-overflow-menu-button'));
       expect(screen.getByRole('menuitem', { name: /Change photo/i })).not.toBeNull();
       const removeBtn = screen.getByRole('menuitem', { name: /Remove photo/i });
       expect(removeBtn).not.toBeNull();
-
       fireEvent.click(removeBtn);
       expect(onUpdatePhoto).toHaveBeenCalledWith(baseTag.uid, { photoAssetId: null, photoUrl: null });
     });
 
     it('loads and renders photo asset from IndexedDB when photoAssetId is provided', async () => {
       const assetId = 'photo-test-rendering';
-      const blob = new Blob(['image-bytes'], { type: 'image/png' });
-      await savePhotoAsset(blob, {
-        id: assetId,
-        mimeType: 'image/png'
-      });
-
-      render(
-        <TagCardItem
-          {...defaultProps}
-          tag={{ ...baseTag, photoAssetId: assetId }}
-        />
-      );
-
+      await savePhotoAsset(new Blob(['image-bytes'], { type: 'image/png' }), { id: assetId, mimeType: 'image/png' });
+      render(<TagCardItem {...defaultProps} tag={{ ...baseTag, photoAssetId: assetId }} />);
       await waitFor(() => {
         const img = screen.getByTestId('tag-photo-img') as HTMLImageElement;
         expect(img).not.toBeNull();
