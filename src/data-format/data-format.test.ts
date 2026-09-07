@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { 
   registrySchema,
   validateImportPayload,
@@ -12,18 +12,22 @@ import {
   EXAMPLE_TAG_REGISTRY_V1,
   CANONICAL_FORMAT,
   CANONICAL_SCHEMA_VERSION,
+  CANONICAL_UID_PATTERN,
   TagRegistryExportDocumentV1,
   ExportableTagV1
 } from './index';
 import { 
   isValidCanonicalUid, 
   canonicalizeUid, 
-  normalizeUid 
+  normalizeUid,
+  formatUidForDisplay,
+  CANONICAL_UID_REGEX
 } from '../domain/uid';
 import { 
   loadTagRegistry, 
   saveTagRegistry, 
   clearTagRegistry, 
+  commitTagRegistry,
   STORAGE_KEY_TAG_REGISTRY 
 } from '../storage/tagRegistryStorage';
 import { NFCTagItem } from '../types';
@@ -55,31 +59,61 @@ beforeAll(() => {
   }
 });
 
-describe('Domain: Canonical UID', () => {
-  it('validates canonical UIDs (lowercase hex, no separators, even length >= 2)', () => {
+describe('Domain: Canonical UID & SSOT Alignment', () => {
+  it('derives CANONICAL_UID_PATTERN directly from JSON Schema SSOT', () => {
+    expect(CANONICAL_UID_PATTERN).toBe(registrySchema.$defs.ExportableTagV1.properties.uid.pattern);
+    expect(CANONICAL_UID_REGEX.source).toBe(registrySchema.$defs.ExportableTagV1.properties.uid.pattern);
+  });
+
+  it('validates canonical UIDs (lowercase hex, no separators, even length 8-32)', () => {
     expect(isValidCanonicalUid('045ab23c9d8001')).toBe(true);
     expect(isValidCanonicalUid('04112233445566')).toBe(true);
-    expect(isValidCanonicalUid('04a1b2c3')).toBe(true);
+    expect(isValidCanonicalUid('04a1b2c3')).toBe(true); // 8 chars (4 bytes)
+    expect(isValidCanonicalUid('0123456789abcdef0123456789abcdef')).toBe(true); // 32 chars (16 bytes)
 
     // Invalid canonical forms
     expect(isValidCanonicalUid('04:5A:B2:3C')).toBe(false); // Colons
     expect(isValidCanonicalUid('04-5a-b2-3c')).toBe(false); // Hyphens
     expect(isValidCanonicalUid('045AB23C')).toBe(false); // Uppercase
-    expect(isValidCanonicalUid('123')).toBe(false); // Odd length
+    expect(isValidCanonicalUid('123')).toBe(false); // Odd length / too short
+    expect(isValidCanonicalUid('123456')).toBe(false); // 6 chars (< 8)
+    expect(isValidCanonicalUid('0123456789abcdef0123456789abcdef00')).toBe(false); // 34 chars (> 32)
     expect(isValidCanonicalUid('')).toBe(false); // Empty
-    expect(isValidCanonicalUid('xyz123')).toBe(false); // Non-hex
+    expect(isValidCanonicalUid('xyz12345')).toBe(false); // Non-hex
   });
 
   it('canonicalizes non-canonical strings into strict canonical lowercase hex', () => {
     expect(canonicalizeUid('04:5A:B2:3C:9D:80:01')).toBe('045ab23c9d8001');
     expect(canonicalizeUid('04-5a-b2-3c-9d-80-01')).toBe('045ab23c9d8001');
-    expect(canonicalizeUid('  045AB2  ')).toBe('045ab2');
+    expect(canonicalizeUid('  045AB23C  ')).toBe('045ab23c');
     expect(isValidCanonicalUid('invalid non hex')).toBe(false);
   });
 
-  it('normalizes UID identically for comparison', () => {
+  it('normalizes UID identically for comparison and formats for display', () => {
     expect(normalizeUid('04:5A:B2:3C')).toBe('045ab23c');
     expect(normalizeUid('04-5a-b2-3c')).toBe('045ab23c');
+    expect(formatUidForDisplay('045ab23c')).toBe('04:5a:b2:3c');
+  });
+
+  it('ensures Schema UID pattern and Domain UID regex behavior match across test vectors', () => {
+    const testCases = [
+      { uid: '045ab23c', valid: true },
+      { uid: '045ab23c9d8001', valid: true },
+      { uid: '0123456789abcdef0123456789abcdef', valid: true },
+      { uid: '04:5a:b2:3c', valid: false },
+      { uid: '045AB23C', valid: false },
+      { uid: '123456', valid: false },
+      { uid: '1234567', valid: false },
+      { uid: '0123456789abcdef0123456789abcdef00', valid: false },
+      { uid: 'gggggggg', valid: false }
+    ];
+
+    const schemaRegex = new RegExp(`^${registrySchema.$defs.ExportableTagV1.properties.uid.pattern}$`);
+    for (const { uid, valid } of testCases) {
+      expect(isValidCanonicalUid(uid)).toBe(valid);
+      expect(schemaRegex.test(uid)).toBe(valid);
+      expect(CANONICAL_UID_REGEX.test(uid)).toBe(valid);
+    }
   });
 });
 
@@ -88,6 +122,11 @@ describe('Canonical JSON Schema (Draft 2020-12)', () => {
     expect(registrySchema.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
     expect(registrySchema.title).toBe('NFCWeb Tag Registry Interchange Schema');
     expect(registrySchema.additionalProperties).toBe(false);
+  });
+
+  it('derives CANONICAL constants strictly from schema SSOT', () => {
+    expect(CANONICAL_FORMAT).toBe(registrySchema.properties.format.const);
+    expect(CANONICAL_SCHEMA_VERSION).toBe(registrySchema.properties.schemaVersion.const);
   });
 
   it('validates the canonical example document successfully', () => {
@@ -179,8 +218,8 @@ describe('Decisive Rejection of Non-Canonical & Legacy Formats', () => {
   });
 });
 
-describe('Export & Codec', () => {
-  const mockTags: NFCTagItem[] = [
+describe('Export & Codec Invariant Enforcement (No Silent Repair)', () => {
+  const validMockTags: NFCTagItem[] = [
     {
       uid: '04112233445566',
       name: 'Test Tag 1',
@@ -191,6 +230,7 @@ describe('Export & Codec', () => {
       tagType: 'NTAG215',
       hasNdef: true,
       notes: 'Test note',
+      isSample: true, // Should be excluded from export
       records: [
         { id: 'rec-1', recordType: 'url', data: 'https://takashisasaki.github.io' },
         { id: 'rec-2', recordType: 'text', data: 'Tag message', lang: 'ja', encoding: 'utf-8' },
@@ -200,8 +240,8 @@ describe('Export & Codec', () => {
     }
   ];
 
-  it('builds canonical v1 export document and ensures canonical UIDs', () => {
-    const doc = buildTagRegistryExportV1(mockTags, '1.0.51', new Date('2026-09-07T10:00:00.000Z'));
+  it('builds canonical v1 export document and strips isSample', () => {
+    const doc = buildTagRegistryExportV1(validMockTags, '1.0.51', new Date('2026-09-07T10:00:00.000Z'));
     expect(doc.format).toBe(CANONICAL_FORMAT);
     expect(doc.schemaVersion).toBe(1);
     expect(doc.appVersion).toBe('1.0.51');
@@ -209,19 +249,86 @@ describe('Export & Codec', () => {
     expect(doc.tags.length).toBe(1);
     expect(doc.tags[0].uid).toBe('04112233445566');
     expect(doc.tags[0].records.length).toBe(4);
+    expect((doc.tags[0] as any).isSample).toBeUndefined();
   });
 
   it('serializes and deserializes cleanly', () => {
-    const doc = buildTagRegistryExportV1(mockTags, '1.0.51');
+    const doc = buildTagRegistryExportV1(validMockTags, '1.0.51');
     const jsonStr = serializeExportDocument(doc);
     const roundTrip = deserializeExportDocument(jsonStr);
     expect(roundTrip.tags.length).toBe(1);
-    expect(roundTrip.tags[0].uid).toBe(mockTags[0].uid);
+    expect(roundTrip.tags[0].uid).toBe(validMockTags[0].uid);
   });
 
   it('generates standardized export filename', () => {
     const fixedDate = new Date(2026, 8, 7, 12, 34, 56);
     expect(generateExportFilename(fixedDate)).toBe('nfcweb-tags-v1-20260907-123456.json');
+  });
+
+  it('rejects inverted timestamps (firstSeen > lastRead) explicitly instead of silently repairing', () => {
+    const invertedTags: NFCTagItem[] = [
+      {
+        ...validMockTags[0],
+        firstSeen: 2000,
+        lastRead: 1000 // Inverted!
+      }
+    ];
+
+    expect(() => buildTagRegistryExportV1(invertedTags, '1.0.51')).toThrow(
+      /violates timestamp invariant: firstSeen/
+    );
+  });
+
+  it('rejects invalid timestamps explicitly', () => {
+    const badTimestampTags: NFCTagItem[] = [
+      {
+        ...validMockTags[0],
+        firstSeen: NaN
+      }
+    ];
+    expect(() => buildTagRegistryExportV1(badTimestampTags, '1.0.51')).toThrow(
+      /invalid firstSeen timestamp/
+    );
+  });
+
+  it('rejects MIME record with missing mediaType explicitly instead of inventing a fallback', () => {
+    const badMimeTags: NFCTagItem[] = [
+      {
+        ...validMockTags[0],
+        records: [
+          { id: 'rec-mime-1', recordType: 'mime', data: 'data', mediaType: '' }
+        ]
+      }
+    ];
+    expect(() => buildTagRegistryExportV1(badMimeTags, '1.0.51')).toThrow(
+      /missing required mediaType/
+    );
+  });
+
+  it('rejects records with missing id explicitly', () => {
+    const badRecordTags: NFCTagItem[] = [
+      {
+        ...validMockTags[0],
+        records: [
+          { id: '', recordType: 'text', data: 'hello' }
+        ]
+      }
+    ];
+    expect(() => buildTagRegistryExportV1(badRecordTags, '1.0.51')).toThrow(
+      /missing required id/
+    );
+  });
+
+  it('rejects invalid canonical UIDs explicitly', () => {
+    const badUidTags: NFCTagItem[] = [
+      {
+        ...validMockTags[0],
+        uid: 'short'
+      }
+    ];
+    expect(() => buildTagRegistryExportV1(badUidTags, '1.0.51')).toThrow(
+      /invalid canonical UID/
+    );
   });
 });
 
@@ -313,11 +420,38 @@ describe('ImportPlan (Merge & Replace)', () => {
     expect(resultingTags.some(t => t.uid === '04222222')).toBe(true);
     expect(resultingTags.some(t => t.uid === '04333333')).toBe(true);
   });
+
+  it('identifies unchanged tags when attributes and records match exactly', () => {
+    const identicalDoc: TagRegistryExportDocumentV1 = {
+      format: CANONICAL_FORMAT,
+      schemaVersion: 1,
+      exportedAt: '2026-09-07T12:00:00.000Z',
+      appVersion: '1.0.51',
+      tags: [
+        {
+          uid: '04111111',
+          name: 'Existing Tag 1',
+          firstSeen: 1000,
+          lastRead: 2000,
+          readCount: 2,
+          hasNdef: false,
+          records: []
+        }
+      ]
+    };
+
+    const plan = buildImportPlan(identicalDoc, localTags, 'merge');
+    expect(plan.unchangedCount).toBe(1);
+    expect(plan.newCount).toBe(0);
+    expect(plan.updateCount).toBe(0);
+    expect(plan.actions.find(a => a.uid === '04111111')?.status).toBe('unchanged');
+  });
 });
 
-describe('Storage Abstraction: tagRegistryStorage', () => {
+describe('Storage Abstraction: tagRegistryStorage & Quota Regression', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.restoreAllMocks();
   });
 
   it('saves and loads tags with canonical UID normalization and lastRead descending sort', () => {
@@ -352,11 +486,53 @@ describe('Storage Abstraction: tagRegistryStorage', () => {
     expect(loaded[1].lastRead).toBe(2000);
   });
 
-  it('clears tag registry and legacy storage keys', () => {
+  it('clears tag registry from localStorage', () => {
     localStorage.setItem(STORAGE_KEY_TAG_REGISTRY, JSON.stringify([{ uid: '0411' }]));
-    localStorage.setItem('nfc_tags', 'legacy');
     clearTagRegistry();
     expect(localStorage.getItem(STORAGE_KEY_TAG_REGISTRY)).toBeNull();
-    expect(localStorage.getItem('nfc_tags')).toBeNull();
+  });
+
+  it('handles QuotaExceededError gracefully in saveTagRegistry', () => {
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      const quotaErr = new Error('Quota exceeded');
+      quotaErr.name = 'QuotaExceededError';
+      throw quotaErr;
+    });
+
+    const res = saveTagRegistry([{ uid: '04112233', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [] }]);
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('QuotaExceededError');
+  });
+
+  it('regression: commitTagRegistry does NOT update state when storage write fails', () => {
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      const quotaErr = new Error('Disk full');
+      quotaErr.name = 'QuotaExceededError';
+      throw quotaErr;
+    });
+
+    let stateUpdated = false;
+    const res = commitTagRegistry(
+      [{ uid: '04112233', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [] }],
+      () => {
+        stateUpdated = true;
+      }
+    );
+
+    expect(res.success).toBe(false);
+    expect(stateUpdated).toBe(false);
+  });
+
+  it('commitTagRegistry invokes applyStateUpdate when storage write succeeds', () => {
+    let persistedCount = 0;
+    const res = commitTagRegistry(
+      [{ uid: '04112233', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [] }],
+      (persisted) => {
+        persistedCount = persisted.length;
+      }
+    );
+
+    expect(res.success).toBe(true);
+    expect(persistedCount).toBe(1);
   });
 });

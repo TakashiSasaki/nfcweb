@@ -7,24 +7,46 @@ import {
   CANONICAL_FORMAT,
   CANONICAL_SCHEMA_VERSION
 } from './types';
-import { canonicalizeUid } from '../domain/uid';
+import { canonicalizeUid, isValidCanonicalUid } from '../domain/uid';
 import { validateImportPayload } from './validate';
 
 /**
  * Reconstructs a clean, canonical v1 transport document from local NFCTagItem entities.
  * Only properties defined in the canonical schema are emitted.
- * - UIDs are formatted to canonical lowercase hex.
+ * - UIDs are verified against canonical validity rules.
+ * - Invariant enforcement: rejects corrupted timestamps, missing record IDs, or missing MIME mediaTypes explicitly.
  * - 'isSample' development-only flag is strictly excluded from public export.
- * - Records are mapped to discriminated NDEF record types.
+ * - Resulting export document is strictly verified against Canonical JSON Schema before return.
  */
 export function buildTagRegistryExportV1(
   tags: readonly NFCTagItem[],
   appVersion: string,
   exportedAtDate: Date = new Date()
 ): NfcwebTagRegistryExportV1 {
-  const sanitizedTags: ExportableTagV1[] = tags.map(tag => {
-    const records: NdefRecord[] = (tag.records || []).map(r => {
-      const id = String(r.id || `rec-${Date.now()}`);
+  const sanitizedTags: ExportableTagV1[] = tags.map((tag, tagIndex) => {
+    const canonicalUid = canonicalizeUid(tag.uid);
+    if (!isValidCanonicalUid(canonicalUid)) {
+      throw new Error(`Tag at index ${tagIndex} has invalid canonical UID: "${tag.uid}". UID must be 8-32 lowercase hexadecimal characters (even length).`);
+    }
+
+    if (typeof tag.firstSeen !== 'number' || !Number.isFinite(tag.firstSeen) || tag.firstSeen < 0) {
+      throw new Error(`Tag "${canonicalUid}" has invalid firstSeen timestamp: ${tag.firstSeen}.`);
+    }
+    if (typeof tag.lastRead !== 'number' || !Number.isFinite(tag.lastRead) || tag.lastRead < 0) {
+      throw new Error(`Tag "${canonicalUid}" has invalid lastRead timestamp: ${tag.lastRead}.`);
+    }
+    if (tag.firstSeen > tag.lastRead) {
+      throw new Error(`Tag "${canonicalUid}" violates timestamp invariant: firstSeen (${tag.firstSeen}) must be <= lastRead (${tag.lastRead}).`);
+    }
+    if (typeof tag.readCount !== 'number' || !Number.isFinite(tag.readCount) || tag.readCount < 0) {
+      throw new Error(`Tag "${canonicalUid}" has invalid readCount: ${tag.readCount}.`);
+    }
+
+    const records: NdefRecord[] = (tag.records || []).map((r, recIndex) => {
+      if (!r.id || String(r.id).trim() === '') {
+        throw new Error(`Tag "${canonicalUid}" record at index ${recIndex} is missing required id.`);
+      }
+      const id = String(r.id).trim();
       const data = String(r.data ?? '');
 
       switch (r.recordType) {
@@ -33,8 +55,8 @@ export function buildTagRegistryExportV1(
             id,
             recordType: 'text' as const,
             data,
-            ...(r.lang ? { lang: String(r.lang) } : {}),
-            ...(r.encoding ? { encoding: String(r.encoding) } : {})
+            ...(r.lang ? { lang: String(r.lang).trim() } : {}),
+            ...(r.encoding ? { encoding: String(r.encoding).trim() } : {})
           };
 
         case 'url':
@@ -44,37 +66,35 @@ export function buildTagRegistryExportV1(
             data
           };
 
-        case 'mime':
+        case 'mime': {
+          if (!r.mediaType || String(r.mediaType).trim() === '') {
+            throw new Error(`Tag "${canonicalUid}" MIME record "${id}" is missing required mediaType.`);
+          }
           return {
             id,
             recordType: 'mime' as const,
             data,
-            mediaType: String(r.mediaType || 'application/octet-stream')
+            mediaType: String(r.mediaType).trim()
           };
+        }
 
         case 'empty':
-        default:
           return {
             id,
             recordType: 'empty' as const,
             data: ''
           };
+
+        default:
+          throw new Error(`Tag "${canonicalUid}" record "${id}" has unsupported recordType: "${(r as any).recordType}".`);
       }
     });
 
-    const canonicalUid = canonicalizeUid(tag.uid);
-    const rawFirstSeen = typeof tag.firstSeen === 'number' && tag.firstSeen >= 0 ? Math.floor(tag.firstSeen) : Date.now();
-    const rawLastRead = typeof tag.lastRead === 'number' && tag.lastRead >= 0 ? Math.floor(tag.lastRead) : Date.now();
-
-    // Enforce invariant: firstSeen <= lastRead
-    const lastRead = Math.max(rawFirstSeen, rawLastRead);
-    const firstSeen = Math.min(rawFirstSeen, lastRead);
-
     const exportTag: ExportableTagV1 = {
       uid: canonicalUid,
-      firstSeen,
-      lastRead,
-      readCount: typeof tag.readCount === 'number' && tag.readCount >= 0 ? Math.floor(tag.readCount) : 1,
+      firstSeen: Math.floor(tag.firstSeen),
+      lastRead: Math.floor(tag.lastRead),
+      readCount: Math.floor(tag.readCount),
       hasNdef: Boolean(tag.hasNdef),
       records
     };
@@ -95,13 +115,21 @@ export function buildTagRegistryExportV1(
     return exportTag;
   });
 
-  return {
+  const exportDoc: NfcwebTagRegistryExportV1 = {
     format: CANONICAL_FORMAT,
     schemaVersion: CANONICAL_SCHEMA_VERSION,
     exportedAt: exportedAtDate.toISOString(),
     appVersion: appVersion || '1.0.0',
     tags: sanitizedTags
   };
+
+  const validation = validateImportPayload(exportDoc);
+  if (!validation.ok) {
+    const detail = validation.errors?.map(e => `${e.path}: ${e.message}`).join(', ') || 'Schema validation failure';
+    throw new Error(`Built export document failed canonical validation: ${detail}`);
+  }
+
+  return exportDoc;
 }
 
 /**

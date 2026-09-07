@@ -1,3 +1,5 @@
+import registrySchema from '../data-format/nfcweb-tag-registry.schema.json';
+
 /**
  * Authoritative domain utilities for NFC Tag Unique Identifiers (UID).
  * 
@@ -7,9 +9,13 @@
  * - no presentation-dependent separators (no colons, hyphens, or spaces)
  * - exactly one representation for one identity
  * - length: 8 to 32 hex characters (4 to 16 bytes, even length)
+ * 
+ * Derived directly from Canonical JSON Schema SSOT:
+ * $defs.ExportableTagV1.properties.uid.pattern
  */
 
-export const CANONICAL_UID_REGEX = /^[0-9a-f]{8,32}$/;
+export const CANONICAL_UID_PATTERN = registrySchema.$defs.ExportableTagV1.properties.uid.pattern;
+export const CANONICAL_UID_REGEX = new RegExp(CANONICAL_UID_PATTERN);
 
 /**
  * Converts any raw or formatted UID string (e.g. "04:5A:B2:3C:9D:80:01" or "04-aa-bb")

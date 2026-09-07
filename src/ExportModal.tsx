@@ -38,14 +38,23 @@ export function ExportModal({
   const { showSuccess, showInfo, showError } = useToast();
   const [copied, setCopied] = useState(false);
 
-  // Generate transport export document
-  const exportDoc = buildTagRegistryExportV1(tags, APP_VERSION);
-  const serializedJson = serializeExportDocument(exportDoc);
+  // Generate transport export document safely
+  const { exportDoc, serializedJson, exportError } = React.useMemo(() => {
+    try {
+      const doc = buildTagRegistryExportV1(tags, APP_VERSION);
+      const json = serializeExportDocument(doc);
+      return { exportDoc: doc, serializedJson: json, exportError: null };
+    } catch (err: any) {
+      return { exportDoc: null, serializedJson: '', exportError: err?.message || 'エクスポートドキュメントの生成に失敗しました。' };
+    }
+  }, [tags]);
+
   const totalTagsCount = tags.length;
   const sampleCount = tags.filter(t => t.isSample).length;
   const physicalCount = totalTagsCount - sampleCount;
 
   const handleCopyClipboard = async () => {
+    if (!serializedJson) return;
     try {
       await navigator.clipboard.writeText(serializedJson);
       setCopied(true);
@@ -57,6 +66,7 @@ export function ExportModal({
   };
 
   const handleDownload = () => {
+    if (!serializedJson) return;
     try {
       const filename = generateExportFilename();
       downloadJsonFile(filename, serializedJson);
@@ -142,6 +152,16 @@ export function ExportModal({
           </div>
         </div>
 
+        {/* Export Invariant Error Banner if corrupted data */}
+        {exportError && (
+          <div className="p-3 bg-red-950/60 border border-red-500/40 rounded-xl text-xs space-y-1">
+            <div className="font-bold text-red-300 flex items-center gap-1.5">
+              <span>エクスポート不整合エラー</span>
+            </div>
+            <p className="text-red-200 font-mono text-[11px]">{exportError}</p>
+          </div>
+        )}
+
         {/* JSON Preview Box */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs text-slate-400">
@@ -149,7 +169,7 @@ export function ExportModal({
             <span className="font-mono text-[10px]">UTF-8 / 2-space indented</span>
           </div>
           <pre className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[10px] font-mono text-slate-300 max-h-36 overflow-auto select-all leading-relaxed whitespace-pre">
-            {serializedJson.slice(0, 800) + (serializedJson.length > 800 ? '\n  ...\n}' : '')}
+            {serializedJson ? (serializedJson.slice(0, 800) + (serializedJson.length > 800 ? '\n  ...\n}' : '')) : '(エクスポートデータがありません)'}
           </pre>
         </div>
 
@@ -166,7 +186,7 @@ export function ExportModal({
           <button
             type="button"
             onClick={handleCopyClipboard}
-            disabled={totalTagsCount === 0}
+            disabled={totalTagsCount === 0 || !serializedJson}
             className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 text-slate-200 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
           >
             {copied ? (
@@ -185,7 +205,7 @@ export function ExportModal({
           <button
             type="button"
             onClick={handleDownload}
-            disabled={totalTagsCount === 0}
+            disabled={totalTagsCount === 0 || !serializedJson}
             className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-900/30"
           >
             <Download className="w-4 h-4" />

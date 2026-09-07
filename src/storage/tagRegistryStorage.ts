@@ -3,7 +3,6 @@ import { canonicalizeUid } from '../domain/uid';
 
 export const TAGS_STORAGE_KEY = 'nfc_tags_registry';
 export const STORAGE_KEY_TAG_REGISTRY = TAGS_STORAGE_KEY;
-export const LEGACY_STORAGE_KEYS = ['nfc_connect_tags_v2', 'nfc_tags'];
 
 export interface StorageOperationResult {
   success: boolean;
@@ -77,16 +76,31 @@ export function saveTagRegistry(tags: readonly NFCTagItem[]): StorageOperationRe
 }
 
 /**
- * Clears tag registry from localStorage and cleans up legacy storage keys.
+ * Atomically commits a tag registry to persistent storage and, ONLY IF successful,
+ * invokes applyStateUpdate to update application/in-memory state.
+ * If storage throws (e.g. QuotaExceededError), in-memory state remains untouched.
+ */
+export function commitTagRegistry(
+  tags: readonly NFCTagItem[],
+  applyStateUpdate?: (persistedTags: NFCTagItem[]) => void
+): StorageOperationResult {
+  const result = saveTagRegistry(tags);
+  if (result.success) {
+    if (applyStateUpdate) {
+      applyStateUpdate(loadTagRegistry());
+    }
+  }
+  return result;
+}
+
+/**
+ * Clears tag registry from localStorage.
  */
 export function clearTagRegistry(): void {
   const storage = getStorage();
   if (!storage) return;
   try {
     storage.removeItem(TAGS_STORAGE_KEY);
-    for (const key of LEGACY_STORAGE_KEYS) {
-      storage.removeItem(key);
-    }
   } catch (err) {
     console.error('Failed to clear tag registry from localStorage:', err);
   }

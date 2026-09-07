@@ -190,7 +190,7 @@ export function ImportModal({
 
       showSuccess(
         importMode === 'merge' ? 'マージ完了' : '置換完了',
-        `${importPlan.totalImported} 件を取り込みました (登録タグ総数: ${resultingTags.length} 件)。`
+        `${importPlan.importCount} 件を取り込みました (登録タグ総数: ${resultingTags.length} 件)。`
       );
       handleModalClose();
     } catch (err: any) {
@@ -298,29 +298,46 @@ export function ImportModal({
             </div>
 
             {/* Preflight Statistics Cards */}
-            <div className="grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
-                <div className="text-[10px] text-slate-400">取り込み総数</div>
-                <div className="text-base font-bold font-mono text-cyan-300 mt-0.5">
-                  {importPlan.totalImported} 件
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+              <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800">
+                <div className="text-[10px] text-slate-400">現在 / 取込総数</div>
+                <div className="text-sm font-bold font-mono text-cyan-300 mt-0.5">
+                  {importPlan.currentCount} → {importPlan.importCount} 件
                 </div>
               </div>
-              <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
+              <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800">
                 <div className="text-[10px] text-slate-400">新規追加 (New)</div>
-                <div className="text-base font-bold font-mono text-emerald-400 mt-0.5">
+                <div className="text-sm font-bold font-mono text-emerald-400 mt-0.5">
                   +{importPlan.newCount} 件
                 </div>
               </div>
-              <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
+              <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800">
                 <div className="text-[10px] text-slate-400">
-                  {importMode === 'merge' ? '上書き更新' : '消去対象'}
+                  {importMode === 'merge' ? '上書き更新 (Update)' : '消去対象 (Remove)'}
                 </div>
-                <div className={`text-base font-bold font-mono mt-0.5 ${
+                <div className={`text-sm font-bold font-mono mt-0.5 ${
                   importMode === 'merge' ? 'text-amber-400' : 'text-red-400'
                 }`}>
                   {importMode === 'merge' ? `${importPlan.updateCount} 件` : `-${importPlan.removedCount} 件`}
                 </div>
               </div>
+              <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800">
+                <div className="text-[10px] text-slate-400">反映後タグ総数 (Result)</div>
+                <div className="text-sm font-bold font-mono text-cyan-300 mt-0.5">
+                  {importPlan.resultingCount} 件
+                </div>
+              </div>
+            </div>
+
+            {/* Detailed Delta Breakdown */}
+            <div className="flex flex-wrap items-center justify-between gap-1.5 px-2.5 py-1.5 bg-slate-950/40 rounded-lg border border-slate-800/80 text-[10px] font-mono text-slate-400">
+              <span>維持: {importPlan.unchangedCount} 件</span>
+              <span>•</span>
+              <span>更新: {importPlan.updateCount} 件</span>
+              <span>•</span>
+              <span>削除: {importPlan.removedCount} 件</span>
+              <span>•</span>
+              <span className="text-cyan-400 font-bold">差分合計: {importPlan.actions.length} 件</span>
             </div>
 
             {/* Mode Selector */}
@@ -410,15 +427,15 @@ export function ImportModal({
                   >
                     <div className="flex items-center gap-2 truncate">
                       <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
-                        action.type === 'add' 
+                        action.status === 'new' 
                           ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
-                          : action.type === 'update' 
+                          : action.status === 'update' 
                           ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
-                          : action.type === 'remove'
+                          : action.status === 'remove'
                           ? 'bg-red-500/20 text-red-300 border border-red-500/30'
                           : 'bg-slate-800 text-slate-400'
                       }`}>
-                        {action.type === 'add' ? '新規追加' : action.type === 'update' ? '更新' : action.type === 'remove' ? '削除' : '維持'}
+                        {action.status === 'new' ? '新規追加' : action.status === 'update' ? '更新' : action.status === 'remove' ? '削除' : '維持'}
                       </span>
                       <span className="font-mono text-slate-300">{action.uid}</span>
                       {action.name && <span className="text-slate-400 truncate">({action.name})</span>}

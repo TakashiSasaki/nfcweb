@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { NFCLog, NFCSettings, NFCTagItem, EditableNDEFRecord } from './types';
 import { normalizeUid, canonicalizeUid, isValidCanonicalUid } from './domain/uid';
-import { loadTagRegistry, saveTagRegistry, clearTagRegistry } from './storage/tagRegistryStorage';
+import { loadTagRegistry, saveTagRegistry, clearTagRegistry, commitTagRegistry } from './storage/tagRegistryStorage';
 
 export { normalizeUid, canonicalizeUid, isValidCanonicalUid };
 
@@ -438,12 +438,9 @@ export function useAppStore() {
   }, []);
 
   const importTagsRegistry = useCallback((newTags: NFCTagItem[]): { success: boolean; error?: string } => {
-    const res = saveTagRegistry(newTags);
-    if (res.success) {
-      setTags(newTags);
-      return { success: true };
-    }
-    return { success: false, error: res.error };
+    return commitTagRegistry(newTags, (persistedTags) => {
+      setTags(persistedTags);
+    });
   }, []);
 
   const isLegacyOrTaggedSample = (t: NFCTagItem) => {

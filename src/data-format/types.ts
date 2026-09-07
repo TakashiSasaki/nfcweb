@@ -8,9 +8,12 @@ import {
   EmptyRecord
 } from './generated/nfcweb-tag-registry';
 import { NFCTagItem } from '../types';
+import registrySchema from './nfcweb-tag-registry.schema.json';
 
-export const CANONICAL_FORMAT = 'nfcweb-tag-registry' as const;
-export const CANONICAL_SCHEMA_VERSION = 1 as const;
+// Authoritative contract metadata derived directly from Canonical JSON Schema (Draft 2020-12)
+export const CANONICAL_FORMAT: NFCWebTagRegistryInterchangeSchema['format'] = registrySchema.properties.format.const as NFCWebTagRegistryInterchangeSchema['format'];
+export const CANONICAL_SCHEMA_VERSION: NFCWebTagRegistryInterchangeSchema['schemaVersion'] = registrySchema.properties.schemaVersion.const as NFCWebTagRegistryInterchangeSchema['schemaVersion'];
+export const CANONICAL_UID_PATTERN: string = registrySchema.$defs.ExportableTagV1.properties.uid.pattern;
 export const MAX_IMPORT_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MiB threshold
 
 // Type alias matching domain naming
