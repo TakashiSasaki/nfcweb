@@ -1,10 +1,9 @@
 /**
- * Central storage exports for nfcweb (`nfcweb_db`).
+ * Public storage surface for the authoritative `nfcweb_db` architecture.
  */
 
 export * from './database';
 export * from './tagRepository';
 export * from './photoAssetRepository';
-export * from './legacyTagRegistryMigration';
-export * from './tagPhotoMutation';
-export * from './tagRegistryStorage';
+export * from './transactionalOperations';
+export * from './tagMutationQueue';
