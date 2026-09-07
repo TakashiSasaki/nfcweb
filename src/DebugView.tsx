@@ -125,11 +125,6 @@ export function DebugView({ store }: DebugViewProps) {
     setConfirmDeleteModal('all');
   };
 
-  // Estimate localStorage bytes
-  const storageUsageBytes = typeof window !== 'undefined' 
-    ? new Blob([localStorage.getItem('nfc_tags_registry') || '']).size 
-    : 0;
-
   return (
     <div className="max-w-4xl h-full space-y-6 pb-8">
       {/* Header */}

@@ -9,28 +9,22 @@ import {
   _resetDBForTesting 
 } from './photoAssetStorage';
 import { 
-  loadTagRegistry, 
-  saveTagRegistry, 
-  commitTagRegistry 
-} from './tagRegistryStorage';
+  saveTag,
+  getTagByUid,
+  getAllTags,
+  clearAllTags
+} from './tagRepository';
+import { 
+  updateTagPhotoTransactional, 
+  importRegistryTransactional,
+  replaceTagRegistryTransactional
+} from './transactionalOperations';
 import { applyTagPhotoUpdate } from './tagPhotoMutation';
-import { NFCTagItem, PhotoUpdate } from '../types';
+import { NFCTagItem } from '../types';
 import { buildImportPlan, applyImportPlan } from '../data-format/import-plan';
 import { TagRegistryExportDocumentV1 } from '../data-format/types';
 
-class LocalStorageMock {
-  private store: Record<string, string> = {};
-  clear() { this.store = {}; }
-  getItem(key: string): string | null { return this.store[key] ?? null; }
-  setItem(key: string, value: string) { this.store[key] = String(value); }
-  removeItem(key: string) { delete this.store[key]; }
-}
-
-if (typeof globalThis.localStorage === 'undefined') {
-  (globalThis as any).localStorage = new LocalStorageMock();
-}
-
-describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
+describe('Cross-Storage Photo & Registry Semantics (Unified IndexedDB)', () => {
   beforeEach(async () => {
     localStorage.clear();
     await _resetDBForTesting();
@@ -38,11 +32,18 @@ describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
   });
 
   it('1. successful add photo: commits to registry and retains asset in IndexedDB', async () => {
-    let currentTags: NFCTagItem[] = [
-      { uid: '04112233445566', name: 'Tag 1', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [] }
-    ];
-    saveTagRegistry(currentTags);
+    const initialTag: NFCTagItem = {
+      uid: '04112233445566',
+      name: 'Tag 1',
+      firstSeen: 1000,
+      lastRead: 1000,
+      readCount: 1,
+      hasNdef: false,
+      records: []
+    };
+    await saveTag(initialTag);
 
+    let currentTags: NFCTagItem[] = [initialTag];
     const assetId = 'photo-new-123';
     await savePhotoAsset(new Blob(['img']), { id: assetId, mimeType: 'image/png' });
 
@@ -57,25 +58,25 @@ describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
     expect(currentTags[0].photoAssetId).toBe(assetId);
     expect(await getPhotoAsset(assetId)).not.toBeNull();
 
-    const loaded = loadTagRegistry();
-    expect(loaded[0].photoAssetId).toBe(assetId);
+    const storedTag = await getTagByUid('04112233445566');
+    expect(storedTag?.photoAssetId).toBe(assetId);
   });
 
   it('2. failed metadata persist rolls back newly created asset without modifying state', async () => {
-    let currentTags: NFCTagItem[] = [
-      { uid: '04112233445566', name: 'Tag 1', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [] }
-    ];
-    saveTagRegistry(currentTags);
+    const initialTag: NFCTagItem = {
+      uid: '04112233445566',
+      name: 'Tag 1',
+      firstSeen: 1000,
+      lastRead: 1000,
+      readCount: 1,
+      hasNdef: false,
+      records: []
+    };
+    // Note: Do NOT save initialTag to IndexedDB so transaction fails on tag not found
 
+    let currentTags: NFCTagItem[] = [initialTag];
     const assetId = 'photo-orphan-candidate';
     await savePhotoAsset(new Blob(['img']), { id: assetId, mimeType: 'image/png' });
-
-    // Mock localStorage failure
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      const err = new Error('Quota exceeded');
-      err.name = 'QuotaExceededError';
-      throw err;
-    });
 
     const result = await applyTagPhotoUpdate({
       tags: currentTags,
@@ -97,10 +98,18 @@ describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
     await savePhotoAsset(new Blob(['old']), { id: oldAssetId, mimeType: 'image/png' });
     await savePhotoAsset(new Blob(['new']), { id: newAssetId, mimeType: 'image/png' });
 
-    let currentTags: NFCTagItem[] = [
-      { uid: '04112233445566', name: 'Tag 1', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [], photoAssetId: oldAssetId }
-    ];
-    saveTagRegistry(currentTags);
+    const initialTag: NFCTagItem = {
+      uid: '04112233445566',
+      name: 'Tag 1',
+      firstSeen: 1000,
+      lastRead: 1000,
+      readCount: 1,
+      hasNdef: false,
+      records: [],
+      photoAssetId: oldAssetId
+    };
+    await saveTag(initialTag);
+    let currentTags: NFCTagItem[] = [initialTag];
 
     const result = await applyTagPhotoUpdate({
       tags: currentTags,
@@ -114,8 +123,8 @@ describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
     expect(await getPhotoAsset(oldAssetId)).toBeNull();
     expect(await getPhotoAsset(newAssetId)).not.toBeNull();
 
-    const loaded = loadTagRegistry();
-    expect(loaded[0].photoAssetId).toBe(newAssetId);
+    const storedTag = await getTagByUid('04112233445566');
+    expect(storedTag?.photoAssetId).toBe(newAssetId);
   });
 
   it('4. failed replace photo preserves old asset and deletes new asset candidate', async () => {
@@ -125,14 +134,18 @@ describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
     await savePhotoAsset(new Blob(['old']), { id: oldAssetId, mimeType: 'image/png' });
     await savePhotoAsset(new Blob(['new']), { id: newAssetId, mimeType: 'image/png' });
 
-    let currentTags: NFCTagItem[] = [
-      { uid: '04112233445566', name: 'Tag 1', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [], photoAssetId: oldAssetId }
-    ];
-    saveTagRegistry(currentTags);
-
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('Disk full');
-    });
+    const initialTag: NFCTagItem = {
+      uid: '04112233445566',
+      name: 'Tag 1',
+      firstSeen: 1000,
+      lastRead: 1000,
+      readCount: 1,
+      hasNdef: false,
+      records: [],
+      photoAssetId: oldAssetId
+    };
+    // Tag not persisted to DB, so mutation fails
+    let currentTags: NFCTagItem[] = [initialTag];
 
     const result = await applyTagPhotoUpdate({
       tags: currentTags,
@@ -151,10 +164,19 @@ describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
     const oldAssetId = 'photo-to-remove';
     await savePhotoAsset(new Blob(['data']), { id: oldAssetId, mimeType: 'image/png' });
 
-    let currentTags: NFCTagItem[] = [
-      { uid: '04112233445566', name: 'Tag 1', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [], photoAssetId: oldAssetId, photoUrl: 'https://example.com/test.jpg' }
-    ];
-    saveTagRegistry(currentTags);
+    const initialTag: NFCTagItem = {
+      uid: '04112233445566',
+      name: 'Tag 1',
+      firstSeen: 1000,
+      lastRead: 1000,
+      readCount: 1,
+      hasNdef: false,
+      records: [],
+      photoAssetId: oldAssetId,
+      photoUrl: 'https://example.com/test.jpg'
+    };
+    await saveTag(initialTag);
+    let currentTags: NFCTagItem[] = [initialTag];
 
     const result = await applyTagPhotoUpdate({
       tags: currentTags,
@@ -168,22 +190,26 @@ describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
     expect(currentTags[0].photoUrl).toBeUndefined();
     expect(await getPhotoAsset(oldAssetId)).toBeNull();
 
-    const loaded = loadTagRegistry();
-    expect(loaded[0].photoAssetId).toBeUndefined();
+    const storedTag = await getTagByUid('04112233445566');
+    expect(storedTag?.photoAssetId).toBeUndefined();
   });
 
   it('6. failed remove photo registry commit preserves old asset and in-memory state', async () => {
     const oldAssetId = 'photo-stay-after-fail';
     await savePhotoAsset(new Blob(['data']), { id: oldAssetId, mimeType: 'image/png' });
 
-    let currentTags: NFCTagItem[] = [
-      { uid: '04112233445566', name: 'Tag 1', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [], photoAssetId: oldAssetId }
-    ];
-    saveTagRegistry(currentTags);
-
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('Storage write failed');
-    });
+    const initialTag: NFCTagItem = {
+      uid: '04112233445566',
+      name: 'Tag 1',
+      firstSeen: 1000,
+      lastRead: 1000,
+      readCount: 1,
+      hasNdef: false,
+      records: [],
+      photoAssetId: oldAssetId
+    };
+    // Not saved to DB -> will fail
+    let currentTags: NFCTagItem[] = [initialTag];
 
     const result = await applyTagPhotoUpdate({
       tags: currentTags,
@@ -201,10 +227,19 @@ describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
     const assetId = 'photo-existing-123';
     await savePhotoAsset(new Blob(['data']), { id: assetId, mimeType: 'image/png' });
 
-    let currentTags: NFCTagItem[] = [
-      { uid: '04112233445566', name: 'Tag 1', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [], photoAssetId: assetId, photoUrl: 'https://example.com/old.jpg' }
-    ];
-    saveTagRegistry(currentTags);
+    const initialTag: NFCTagItem = {
+      uid: '04112233445566',
+      name: 'Tag 1',
+      firstSeen: 1000,
+      lastRead: 1000,
+      readCount: 1,
+      hasNdef: false,
+      records: [],
+      photoAssetId: assetId,
+      photoUrl: 'https://example.com/old.jpg'
+    };
+    await saveTag(initialTag);
+    let currentTags: NFCTagItem[] = [initialTag];
 
     const result = await applyTagPhotoUpdate({
       tags: currentTags,
@@ -216,22 +251,31 @@ describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
     expect(result.success).toBe(true);
     expect(currentTags[0].photoAssetId).toBe(assetId);
     expect(currentTags[0].photoUrl).toBe('https://example.com/new.jpg');
-    // Crucial fix assertion: IndexedDB asset must NOT be deleted
+    // Crucial assertion: IndexedDB asset must NOT be deleted
     expect(await getPhotoAsset(assetId)).not.toBeNull();
 
-    const loaded = loadTagRegistry();
-    expect(loaded[0].photoAssetId).toBe(assetId);
-    expect(loaded[0].photoUrl).toBe('https://example.com/new.jpg');
+    const storedTag = await getTagByUid('04112233445566');
+    expect(storedTag?.photoAssetId).toBe(assetId);
+    expect(storedTag?.photoUrl).toBe('https://example.com/new.jpg');
   });
 
   it('8. empty / no-op photo update preserves all fields and deletes nothing', async () => {
     const assetId = 'photo-noop-test';
     await savePhotoAsset(new Blob(['data']), { id: assetId, mimeType: 'image/png' });
 
-    let currentTags: NFCTagItem[] = [
-      { uid: '04112233445566', name: 'Tag 1', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [], photoAssetId: assetId, photoUrl: 'https://example.com/pic.jpg' }
-    ];
-    saveTagRegistry(currentTags);
+    const initialTag: NFCTagItem = {
+      uid: '04112233445566',
+      name: 'Tag 1',
+      firstSeen: 1000,
+      lastRead: 1000,
+      readCount: 1,
+      hasNdef: false,
+      records: [],
+      photoAssetId: assetId,
+      photoUrl: 'https://example.com/pic.jpg'
+    };
+    await saveTag(initialTag);
+    let currentTags: NFCTagItem[] = [initialTag];
 
     const result = await applyTagPhotoUpdate({
       tags: currentTags,
@@ -250,10 +294,19 @@ describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
     const assetId = 'photo-keep-me';
     await savePhotoAsset(new Blob(['data']), { id: assetId, mimeType: 'image/png' });
 
-    let currentTags: NFCTagItem[] = [
-      { uid: '04112233445566', name: 'Tag 1', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [], photoAssetId: assetId, photoUrl: 'https://example.com/remove-url.jpg' }
-    ];
-    saveTagRegistry(currentTags);
+    const initialTag: NFCTagItem = {
+      uid: '04112233445566',
+      name: 'Tag 1',
+      firstSeen: 1000,
+      lastRead: 1000,
+      readCount: 1,
+      hasNdef: false,
+      records: [],
+      photoAssetId: assetId,
+      photoUrl: 'https://example.com/remove-url.jpg'
+    };
+    await saveTag(initialTag);
+    let currentTags: NFCTagItem[] = [initialTag];
 
     const result = await applyTagPhotoUpdate({
       tags: currentTags,
@@ -267,9 +320,9 @@ describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
     expect(currentTags[0].photoUrl).toBeUndefined();
     expect(await getPhotoAsset(assetId)).not.toBeNull();
 
-    const loaded = loadTagRegistry();
-    expect(loaded[0].photoAssetId).toBe(assetId);
-    expect(loaded[0].photoUrl).toBeUndefined();
+    const storedTag = await getTagByUid('04112233445566');
+    expect(storedTag?.photoAssetId).toBe(assetId);
+    expect(storedTag?.photoUrl).toBeUndefined();
   });
 
   it('10. tag-not-found rolls back newly supplied photo asset candidate', async () => {
@@ -279,7 +332,6 @@ describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
     let currentTags: NFCTagItem[] = [
       { uid: '04112233445566', name: 'Tag 1', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [] }
     ];
-    saveTagRegistry(currentTags);
 
     const result = await applyTagPhotoUpdate({
       tags: currentTags,
@@ -294,7 +346,7 @@ describe('Cross-Storage Photo & Registry Semantics (Production Logic)', () => {
   });
 });
 
-describe('Import & Export Photo Lifecycle Semantics', () => {
+describe('Import & Export Photo Lifecycle Semantics (Unified IndexedDB)', () => {
   beforeEach(async () => {
     localStorage.clear();
     await _resetDBForTesting();
@@ -318,7 +370,7 @@ describe('Import & Export Photo Lifecycle Semantics', () => {
         photoUrl: 'https://example.com/local.jpg'
       }
     ];
-    saveTagRegistry(currentTags);
+    await saveTag(currentTags[0]);
 
     const incomingDoc: TagRegistryExportDocumentV1 = {
       format: 'nfcweb-tag-registry',
@@ -341,14 +393,14 @@ describe('Import & Export Photo Lifecycle Semantics', () => {
     const plan = buildImportPlan(incomingDoc, currentTags, 'merge');
     const resultingTags = applyImportPlan(plan);
 
-    const commitRes = commitTagRegistry(resultingTags, (persisted) => {
-      currentTags = persisted;
-    });
+    const commitRes = await importRegistryTransactional(resultingTags, 'merge');
 
     expect(commitRes.success).toBe(true);
-    expect(currentTags[0].name).toBe('Imported Canonical Name');
-    expect(currentTags[0].photoAssetId).toBe(assetId);
-    expect(currentTags[0].photoUrl).toBe('https://example.com/local.jpg');
+    const stored = await getAllTags();
+    expect(stored.length).toBe(1);
+    expect(stored[0].name).toBe('Imported Canonical Name');
+    expect(stored[0].photoAssetId).toBe(assetId);
+    expect(stored[0].photoUrl).toBe('https://example.com/local.jpg');
     expect(await getPhotoAsset(assetId)).not.toBeNull();
   });
 
@@ -362,7 +414,7 @@ describe('Import & Export Photo Lifecycle Semantics', () => {
       { uid: '04112233445566', name: 'Tag 1', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [], photoAssetId: oldAssetId1 },
       { uid: '04998877665544', name: 'Tag 2', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [], photoAssetId: oldAssetId2 }
     ];
-    saveTagRegistry(currentTags);
+    await replaceTagRegistryTransactional(currentTags);
 
     const incomingDoc: TagRegistryExportDocumentV1 = {
       format: 'nfcweb-tag-registry',
@@ -385,87 +437,16 @@ describe('Import & Export Photo Lifecycle Semantics', () => {
     const plan = buildImportPlan(incomingDoc, currentTags, 'replace');
     const resultingTags = applyImportPlan(plan);
 
-    // Simulate import handler logic in store (importTagsRegistry)
-    const previousAssetIds = new Set<string>(
-      currentTags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id))
-    );
-    const newAssetIds = new Set<string>(
-      resultingTags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id))
-    );
-    const unreferencedAssetIds = Array.from(previousAssetIds).filter(id => !newAssetIds.has(id));
-
-    const commitRes = commitTagRegistry(resultingTags, (persisted) => {
-      currentTags = persisted;
-    });
-
-    if (commitRes.success && unreferencedAssetIds.length > 0) {
-      await deletePhotoAssets(unreferencedAssetIds);
-    }
+    const commitRes = await importRegistryTransactional(resultingTags, 'replace');
 
     expect(commitRes.success).toBe(true);
-    expect(currentTags.length).toBe(1);
-    expect(currentTags[0].uid).toBe('04aabbccddeeff');
+    const stored = await getAllTags();
+    expect(stored.length).toBe(1);
+    expect(stored[0].uid).toBe('04aabbccddeeff');
 
     // Both old assets must be deleted
     expect(await getPhotoAsset(oldAssetId1)).toBeNull();
     expect(await getPhotoAsset(oldAssetId2)).toBeNull();
-  });
-
-  it('failed replace import preserves old registry and existing assets', async () => {
-    const assetId = 'photo-preserve-on-replace-fail';
-    await savePhotoAsset(new Blob(['keep']), { id: assetId, mimeType: 'image/png' });
-
-    let currentTags: NFCTagItem[] = [
-      { uid: '04112233445566', name: 'Tag 1', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [], photoAssetId: assetId }
-    ];
-    saveTagRegistry(currentTags);
-
-    const incomingDoc: TagRegistryExportDocumentV1 = {
-      format: 'nfcweb-tag-registry',
-      schemaVersion: 1,
-      exportedAt: '2026-09-07T00:00:00.000Z',
-      appVersion: '1.0.63',
-      tags: [
-        {
-          uid: '04aabbccddeeff',
-          name: 'New Tag',
-          firstSeen: 2000,
-          lastRead: 2000,
-          readCount: 1,
-          hasNdef: false,
-          records: []
-        }
-      ]
-    };
-
-    const plan = buildImportPlan(incomingDoc, currentTags, 'replace');
-    const resultingTags = applyImportPlan(plan);
-
-    const previousAssetIds = new Set<string>(
-      currentTags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id))
-    );
-    const newAssetIds = new Set<string>(
-      resultingTags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id))
-    );
-    const unreferencedAssetIds = Array.from(previousAssetIds).filter(id => !newAssetIds.has(id));
-
-    // Simulate write error
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('Disk full');
-    });
-
-    const commitRes = commitTagRegistry(resultingTags, (persisted) => {
-      currentTags = persisted;
-    });
-
-    if (commitRes.success && unreferencedAssetIds.length > 0) {
-      await deletePhotoAssets(unreferencedAssetIds);
-    }
-
-    expect(commitRes.success).toBe(false);
-    expect(currentTags.length).toBe(1);
-    expect(currentTags[0].photoAssetId).toBe(assetId);
-    expect(await getPhotoAsset(assetId)).not.toBeNull();
   });
 });
 

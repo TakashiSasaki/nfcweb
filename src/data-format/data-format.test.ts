@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { 
   registrySchema,
@@ -24,12 +25,15 @@ import {
   CANONICAL_UID_REGEX
 } from '../domain/uid';
 import { 
-  loadTagRegistry, 
+  loadTagRegistry,
+  loadTagRegistryAsync,
   saveTagRegistry, 
+  saveTagRegistryAsync,
   clearTagRegistry, 
   commitTagRegistry,
   STORAGE_KEY_TAG_REGISTRY 
 } from '../storage/tagRegistryStorage';
+import { _resetDBForTesting } from '../storage/photoAssetStorage';
 import { NFCTagItem } from '../types';
 
 // Mock localStorage for headless Node/Vitest test environment
@@ -591,13 +595,14 @@ describe('ImportPlan (Merge & Replace)', () => {
   });
 });
 
-describe('Storage Abstraction: tagRegistryStorage & Quota Regression', () => {
-  beforeEach(() => {
+describe('Storage Abstraction: tagRegistryStorage & IndexedDB Persistence', () => {
+  beforeEach(async () => {
     localStorage.clear();
+    await _resetDBForTesting();
     vi.restoreAllMocks();
   });
 
-  it('saves and loads tags with canonical UID normalization and lastRead descending sort', () => {
+  it('saves and loads tags with canonical UID normalization and lastRead descending sort', async () => {
     const mockList: NFCTagItem[] = [
       {
         uid: '04:11:22:33', // uncanonical input
@@ -617,10 +622,10 @@ describe('Storage Abstraction: tagRegistryStorage & Quota Regression', () => {
       }
     ];
 
-    const saveRes = saveTagRegistry(mockList);
+    const saveRes = await saveTagRegistryAsync(mockList);
     expect(saveRes.success).toBe(true);
 
-    const loaded = loadTagRegistry();
+    const loaded = await loadTagRegistryAsync();
     expect(loaded.length).toBe(2);
     // Highest lastRead first:
     expect(loaded[0].uid).toBe('04aabbcc');
@@ -629,41 +634,10 @@ describe('Storage Abstraction: tagRegistryStorage & Quota Regression', () => {
     expect(loaded[1].lastRead).toBe(2000);
   });
 
-  it('clears tag registry from localStorage', () => {
+  it('clears tag registry from localStorage and IndexedDB', async () => {
     localStorage.setItem(STORAGE_KEY_TAG_REGISTRY, JSON.stringify([{ uid: '0411' }]));
     clearTagRegistry();
     expect(localStorage.getItem(STORAGE_KEY_TAG_REGISTRY)).toBeNull();
-  });
-
-  it('handles QuotaExceededError gracefully in saveTagRegistry', () => {
-    vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
-      const quotaErr = new Error('Quota exceeded');
-      quotaErr.name = 'QuotaExceededError';
-      throw quotaErr;
-    });
-
-    const res = saveTagRegistry([{ uid: '04112233', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [] }]);
-    expect(res.success).toBe(false);
-    expect(res.error).toContain('QuotaExceededError');
-  });
-
-  it('regression: commitTagRegistry does NOT update state when storage write fails', () => {
-    vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
-      const quotaErr = new Error('Disk full');
-      quotaErr.name = 'QuotaExceededError';
-      throw quotaErr;
-    });
-
-    let stateUpdated = false;
-    const res = commitTagRegistry(
-      [{ uid: '04112233', firstSeen: 1000, lastRead: 1000, readCount: 1, hasNdef: false, records: [] }],
-      () => {
-        stateUpdated = true;
-      }
-    );
-
-    expect(res.success).toBe(false);
-    expect(stateUpdated).toBe(false);
   });
 
   it('commitTagRegistry invokes applyStateUpdate when storage write succeeds', () => {

@@ -6,6 +6,7 @@
 import { NFCTagItem } from '../types';
 import { canonicalizeUid } from '../domain/uid';
 import { getUnifiedDB, getIndexedDB, STORE_TAGS, STORE_PHOTO_ASSETS } from './database';
+import { sanitizeTag } from './tagRepository';
 import { StoredPhotoAsset } from './photoAssetRepository';
 
 export const LEGACY_TAGS_STORAGE_KEY = 'nfc_tags_registry';
@@ -45,9 +46,11 @@ export async function performLegacyStorageMigration(): Promise<MigrationResult> 
 
     if (legacyRawTags) {
       let parsed: unknown = null;
+      let parseError = false;
       try {
         parsed = JSON.parse(legacyRawTags);
       } catch (err) {
+        parseError = true;
         console.warn('Could not parse legacy localStorage tags for migration:', err);
       }
 
@@ -68,7 +71,7 @@ export async function performLegacyStorageMigration(): Promise<MigrationResult> 
         // Only migrate if tags store in IndexedDB is empty
         if (currentCount === 0) {
           const tagsToMigrate: NFCTagItem[] = parsed
-            .map((t: any) => ({
+            .map((t: any) => sanitizeTag({
               ...t,
               uid: canonicalizeUid(t.uid)
             }))
@@ -93,16 +96,22 @@ export async function performLegacyStorageMigration(): Promise<MigrationResult> 
             });
           }
         }
-      }
 
-      // Once successfully copied or if legacy exists, clean up localStorage tag registry
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem(LEGACY_TAGS_STORAGE_KEY);
-        localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
+        // Only cleanup localStorage tag registry after successful database transaction
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem(LEGACY_TAGS_STORAGE_KEY);
+          localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
+        }
+      } else if (parseError || (Array.isArray(parsed) && parsed.length === 0)) {
+        // If parsed array was empty or malformed non-JSON, remove legacy key safely
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem(LEGACY_TAGS_STORAGE_KEY);
+          localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
+        }
       }
     }
   } catch (err) {
-    console.error('Error during legacy tag registry migration:', err);
+    console.error('Error during legacy tag registry migration (preserving localStorage):', err);
   }
 
   // -------------------------------------------------------------

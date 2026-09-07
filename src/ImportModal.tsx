@@ -26,7 +26,7 @@ interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   localTags: readonly NFCTagItem[];
-  onCommitImport: (tags: NFCTagItem[]) => { success: boolean; error?: string };
+  onCommitImport: (tags: NFCTagItem[], mode?: ImportMode) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
   onOpenSchema: () => void;
 }
 
@@ -170,7 +170,7 @@ export function ImportModal({
     if (file) processRawFile(file);
   };
 
-  const handleExecuteImport = () => {
+  const handleExecuteImport = async () => {
     if (!importPlan) return;
 
     if (importMode === 'replace' && !confirmReplaceChecked) {
@@ -182,9 +182,9 @@ export function ImportModal({
       const resultingTags = applyImportPlan(importPlan);
 
       // Mutate through store and handle storage quota safety
-      const commitRes = onCommitImport(resultingTags);
+      const commitRes = await onCommitImport(resultingTags, importMode);
       if (!commitRes.success) {
-        showError('Storage Error', commitRes.error || 'Failed to persist imported tags to local storage.');
+        showError('Storage Error', commitRes.error || 'Failed to persist imported tags to IndexedDB.');
         return;
       }
 

@@ -78,13 +78,23 @@ export interface NFCSettings {
   vibrateOnScan?: boolean;
 }
 
+export interface NormalizedPhotoImage {
+  blob: Blob;
+  width?: number;
+  height?: number;
+  mimeType?: string;
+  id?: string;
+}
+
 /**
  * Explicit photo update instruction.
  * - omitted / undefined: leave field unchanged
  * - null: explicitly clear field
  * - string: set new value
+ * - newPhotoAsset: normalized image record to persist in photo_assets within the atomic transaction
  */
 export interface PhotoUpdate {
   photoAssetId?: string | null;
   photoUrl?: string | null;
+  newPhotoAsset?: NormalizedPhotoImage;
 }

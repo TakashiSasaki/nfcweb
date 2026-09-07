@@ -6,6 +6,7 @@ import { NFCTagItem, PhotoUpdate } from '../types';
 import { canonicalizeUid } from '../domain/uid';
 import { getUnifiedDB, STORE_TAGS, STORE_PHOTO_ASSETS } from './database';
 import { sanitizeTag } from './tagRepository';
+import { generatePhotoAssetId } from './photoAssetRepository';
 
 export interface StorageOperationResult {
   success: boolean;
@@ -76,7 +77,7 @@ export async function clearAllTagsTransactional(): Promise<void> {
 /**
  * Transactionally imports or replaces tags in `nfcweb_db`.
  * In 'replace' mode, it clears old tags, puts new tags, and cleans up any unreferenced photo assets.
- * In 'merge' mode, it puts/updates new tags into the store.
+ * In 'merge' mode, it merges incoming tags while preserving attached photo assets and URLs.
  */
 export async function importRegistryTransactional(
   tags: readonly NFCTagItem[],
@@ -90,6 +91,14 @@ export async function importRegistryTransactional(
       const tx = db.transaction([STORE_TAGS, STORE_PHOTO_ASSETS], 'readwrite');
       const tagsStore = tx.objectStore(STORE_TAGS);
       const photosStore = tx.objectStore(STORE_PHOTO_ASSETS);
+
+      let hasResolved = false;
+      const finishOnce = (res: StorageOperationResult) => {
+        if (!hasResolved) {
+          hasResolved = true;
+          resolve(res);
+        }
+      };
 
       if (mode === 'replace') {
         const getAllReq = tagsStore.getAll();
@@ -119,25 +128,51 @@ export async function importRegistryTransactional(
           tx.abort();
         };
       } else {
-        // Merge mode: put each incoming tag
-        for (const tag of sanitizedList) {
-          tagsStore.put(tag);
-        }
+        // Merge mode: read current tags and merge canonical properties while preserving existing local photos
+        const getAllReq = tagsStore.getAll();
+        getAllReq.onsuccess = () => {
+          const currentTags = (getAllReq.result as NFCTagItem[]) || [];
+          const currentMap = new Map<string, NFCTagItem>();
+          for (const cur of currentTags) {
+            currentMap.set(cur.uid, cur);
+          }
+
+          for (const incoming of sanitizedList) {
+            const existing = currentMap.get(incoming.uid);
+            let mergedTag: NFCTagItem;
+            if (existing) {
+              mergedTag = {
+                ...incoming,
+                photoAssetId: incoming.photoAssetId !== undefined ? incoming.photoAssetId : existing.photoAssetId,
+                photoUrl: incoming.photoUrl !== undefined ? incoming.photoUrl : existing.photoUrl
+              };
+              if (mergedTag.photoAssetId === undefined) delete mergedTag.photoAssetId;
+              if (mergedTag.photoUrl === undefined) delete mergedTag.photoUrl;
+            } else {
+              mergedTag = incoming;
+            }
+            tagsStore.put(mergedTag);
+          }
+        };
+
+        getAllReq.onerror = () => {
+          tx.abort();
+        };
       }
 
       tx.oncomplete = () => {
-        resolve({ success: true });
+        finishOnce({ success: true });
       };
 
       tx.onerror = () => {
-        resolve({
+        finishOnce({
           success: false,
           error: tx.error?.message || 'Transaction error during tag registry import'
         });
       };
 
       tx.onabort = () => {
-        resolve({
+        finishOnce({
           success: false,
           error: tx.error?.message || 'Transaction aborted during tag registry import'
         });
@@ -162,6 +197,7 @@ export async function replaceTagRegistryTransactional(
 
 /**
  * Atomically updates a tag's photo metadata and manages photo assets in IndexedDB.
+ * Supports adding, replacing, or clearing photos, or updating photoUrl in a single transaction.
  */
 export async function updateTagPhotoTransactional(
   uid: string,
@@ -181,23 +217,51 @@ export async function updateTagPhotoTransactional(
       const photosStore = tx.objectStore(STORE_PHOTO_ASSETS);
 
       let updatedTag: NFCTagItem | undefined;
+      let hasResolved = false;
+
+      const finishOnce = (res: { success: boolean; error?: string; tag?: NFCTagItem }) => {
+        if (!hasResolved) {
+          hasResolved = true;
+          resolve(res);
+        }
+      };
 
       const getReq = tagsStore.get(canon);
       getReq.onsuccess = () => {
         const currentTag = getReq.result as NFCTagItem | undefined;
         if (!currentTag) {
           tx.abort();
-          resolve({ success: false, error: `Tag with UID [${uid}] not found` });
+          finishOnce({ success: false, error: `Tag with UID [${uid}] not found` });
           return;
         }
 
         const oldAssetId = currentTag.photoAssetId;
+        let newAssetId: string | undefined;
+
+        if (update.newPhotoAsset) {
+          const asset = update.newPhotoAsset;
+          newAssetId = asset.id || generatePhotoAssetId();
+          const now = Date.now();
+          photosStore.put({
+            id: newAssetId,
+            blob: asset.blob,
+            mimeType: asset.mimeType || asset.blob.type || 'image/jpeg',
+            byteSize: asset.blob.size,
+            createdAt: now,
+            updatedAt: now,
+            width: asset.width,
+            height: asset.height
+          });
+        }
+
         const effectiveAssetId: string | undefined =
-          update.photoAssetId === undefined
-            ? oldAssetId
-            : update.photoAssetId === null
-              ? undefined
-              : update.photoAssetId;
+          newAssetId !== undefined
+            ? newAssetId
+            : update.photoAssetId === undefined
+              ? oldAssetId
+              : update.photoAssetId === null
+                ? undefined
+                : update.photoAssetId;
 
         const effectivePhotoUrl: string | undefined =
           update.photoUrl === undefined
@@ -230,22 +294,25 @@ export async function updateTagPhotoTransactional(
 
       getReq.onerror = () => {
         tx.abort();
-        resolve({ success: false, error: getReq.error?.message || 'Failed to read tag' });
+        finishOnce({ success: false, error: getReq.error?.message || 'Failed to read tag' });
       };
 
       tx.oncomplete = () => {
-        resolve({ success: true, tag: updatedTag });
+        finishOnce({ success: true, tag: updatedTag });
       };
 
       tx.onerror = () => {
-        resolve({
+        finishOnce({
           success: false,
           error: tx.error?.message || 'Transaction error updating tag photo'
         });
       };
 
       tx.onabort = () => {
-        // Will resolve with error if triggered by getReq.onerror or missing tag
+        finishOnce({
+          success: false,
+          error: tx.error?.message || 'Transaction aborted updating tag photo'
+        });
       };
     } catch (err: any) {
       resolve({
