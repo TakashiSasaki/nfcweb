@@ -55,11 +55,11 @@ export async function savePhotoAsset(
     try {
       const tx = db.transaction(STORE_PHOTO_ASSETS, 'readwrite');
       const store = tx.objectStore(STORE_PHOTO_ASSETS);
-      const req = store.put(record);
+      store.put(record);
 
-      req.onsuccess = () => resolve(id);
-      req.onerror = () => reject(req.error || new Error('Failed to save photo asset to IndexedDB'));
+      tx.oncomplete = () => resolve(id);
       tx.onerror = () => reject(tx.error || new Error('Transaction failed while saving photo asset'));
+      tx.onabort = () => reject(tx.error || new Error('Transaction aborted while saving photo asset'));
     } catch (err) {
       reject(err);
     }
@@ -105,20 +105,20 @@ export async function getPhotoAssetBlob(assetId: string): Promise<Blob | null> {
  */
 export async function deletePhotoAsset(assetId: string): Promise<void> {
   if (!assetId) return;
-  try {
-    const db = await getUnifiedDB();
-    return new Promise<void>((resolve, reject) => {
+  const db = await getUnifiedDB();
+  return new Promise<void>((resolve, reject) => {
+    try {
       const tx = db.transaction(STORE_PHOTO_ASSETS, 'readwrite');
       const store = tx.objectStore(STORE_PHOTO_ASSETS);
-      const req = store.delete(assetId);
+      store.delete(assetId);
 
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error || new Error(`Failed to delete photo asset ${assetId}`));
-      tx.onerror = () => reject(tx.error || new Error(`Transaction failed while deleting photo asset ${assetId}`));
-    });
-  } catch (err) {
-    console.warn('Error deleting photo asset from IndexedDB:', err);
-  }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error(`Failed to delete photo asset ${assetId}`));
+      tx.onabort = () => reject(tx.error || new Error(`Transaction aborted while deleting photo asset ${assetId}`));
+    } catch (err) {
+      reject(err);
+    }
+  });
 }
 
 /**
@@ -127,9 +127,9 @@ export async function deletePhotoAsset(assetId: string): Promise<void> {
 export async function deletePhotoAssets(assetIds: string[]): Promise<void> {
   const validIds = assetIds.filter(Boolean);
   if (validIds.length === 0) return;
-  try {
-    const db = await getUnifiedDB();
-    return new Promise<void>((resolve, reject) => {
+  const db = await getUnifiedDB();
+  return new Promise<void>((resolve, reject) => {
+    try {
       const tx = db.transaction(STORE_PHOTO_ASSETS, 'readwrite');
       const store = tx.objectStore(STORE_PHOTO_ASSETS);
 
@@ -139,10 +139,11 @@ export async function deletePhotoAssets(assetIds: string[]): Promise<void> {
 
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error || new Error('Transaction failed while deleting photo assets'));
-    });
-  } catch (err) {
-    console.warn('Error batch deleting photo assets from IndexedDB:', err);
-  }
+      tx.onabort = () => reject(tx.error || new Error('Transaction aborted while deleting photo assets'));
+    } catch (err) {
+      reject(err);
+    }
+  });
 }
 
 /**

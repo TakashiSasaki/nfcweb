@@ -296,9 +296,13 @@ export function DebugView({ store }: DebugViewProps) {
           {/* Seed 50 Tags */}
           <button
             type="button"
-            onClick={() => {
-              seedMockTags(50);
-              showSuccess('Sample Tags Generated', 'Added 50 mock tags with multi-record, single-record, and ID-only payloads.');
+            onClick={async () => {
+              try {
+                await seedMockTags(50);
+                showSuccess('Sample Tags Generated', 'Added 50 mock tags with multi-record, single-record, and ID-only payloads.');
+              } catch (err: any) {
+                showNFCError(err || new Error('Failed to generate sample tags'), 'write');
+              }
             }}
             className="flex items-center justify-center gap-2 p-3 bg-cyan-950 hover:bg-cyan-900 active:bg-cyan-950 text-cyan-300 rounded-xl border border-cyan-500/40 hover:border-cyan-400 text-xs font-bold transition-all shadow-sm"
           >
@@ -309,9 +313,13 @@ export function DebugView({ store }: DebugViewProps) {
           {/* Seed 10 Tags */}
           <button
             type="button"
-            onClick={() => {
-              seedMockTags(10);
-              showSuccess('Sample Tags Generated', 'Added 10 mock tags to registry.');
+            onClick={async () => {
+              try {
+                await seedMockTags(10);
+                showSuccess('Sample Tags Generated', 'Added 10 mock tags to registry.');
+              } catch (err: any) {
+                showNFCError(err || new Error('Failed to generate sample tags'), 'write');
+              }
             }}
             className="flex items-center justify-center gap-2 p-3 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 rounded-xl border border-slate-700 text-xs font-bold transition-all"
           >
@@ -511,11 +519,15 @@ export function DebugView({ store }: DebugViewProps) {
             {confirmDeleteModal === 'samples' ? (
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   const count = sampleTagsCount;
-                  clearSampleTags();
-                  setConfirmDeleteModal('none');
-                  showSuccess('Sample Tags Deleted', `Removed ${count} sample tag(s). ${realTagsCount} real tag(s) preserved.`);
+                  try {
+                    await clearSampleTags();
+                    setConfirmDeleteModal('none');
+                    showSuccess('Sample Tags Deleted', `Removed ${count} sample tag(s). ${realTagsCount} real tag(s) preserved.`);
+                  } catch (err: any) {
+                    showNFCError(err || new Error('Failed to delete sample tags'), 'write');
+                  }
                 }}
                 className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
               >
@@ -525,11 +537,15 @@ export function DebugView({ store }: DebugViewProps) {
             ) : (
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   const count = tags.length;
-                  clearAllTags();
-                  setConfirmDeleteModal('none');
-                  showSuccess('All Tags Cleared', `Successfully deleted all ${count} tags from local registry.`);
+                  try {
+                    await clearAllTags();
+                    setConfirmDeleteModal('none');
+                    showSuccess('All Tags Cleared', `Successfully deleted all ${count} tags from local registry.`);
+                  } catch (err: any) {
+                    showNFCError(err || new Error('Failed to clear tags'), 'write');
+                  }
                 }}
                 className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
               >

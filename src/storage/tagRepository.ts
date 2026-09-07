@@ -84,11 +84,11 @@ export async function saveTag(tag: NFCTagItem): Promise<void> {
     try {
       const tx = db.transaction(STORE_TAGS, 'readwrite');
       const store = tx.objectStore(STORE_TAGS);
-      const req = store.put(sanitized);
+      store.put(sanitized);
 
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error || new Error(`Failed to save tag ${tag.uid}`));
+      tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error || new Error(`Transaction error while saving tag ${tag.uid}`));
+      tx.onabort = () => reject(tx.error || new Error(`Transaction aborted while saving tag ${tag.uid}`));
     } catch (err) {
       reject(err);
     }
@@ -114,6 +114,7 @@ export async function saveAllTags(tags: readonly NFCTagItem[]): Promise<void> {
 
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error || new Error('Transaction error while saving tags'));
+      tx.onabort = () => reject(tx.error || new Error('Transaction aborted while saving tags'));
     } catch (err) {
       reject(err);
     }
@@ -132,11 +133,11 @@ export async function deleteTag(uid: string): Promise<void> {
     try {
       const tx = db.transaction(STORE_TAGS, 'readwrite');
       const store = tx.objectStore(STORE_TAGS);
-      const req = store.delete(canon);
+      store.delete(canon);
 
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error || new Error(`Failed to delete tag ${uid}`));
+      tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error || new Error(`Transaction error deleting tag ${uid}`));
+      tx.onabort = () => reject(tx.error || new Error(`Transaction aborted deleting tag ${uid}`));
     } catch (err) {
       reject(err);
     }
@@ -162,6 +163,7 @@ export async function deleteTags(uids: string[]): Promise<void> {
 
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error || new Error('Transaction error batch deleting tags'));
+      tx.onabort = () => reject(tx.error || new Error('Transaction aborted batch deleting tags'));
     } catch (err) {
       reject(err);
     }
@@ -177,11 +179,11 @@ export async function clearAllTags(): Promise<void> {
     try {
       const tx = db.transaction(STORE_TAGS, 'readwrite');
       const store = tx.objectStore(STORE_TAGS);
-      const req = store.clear();
+      store.clear();
 
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error || new Error('Failed to clear tag registry in IndexedDB'));
+      tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error || new Error('Transaction error clearing tags in IndexedDB'));
+      tx.onabort = () => reject(tx.error || new Error('Transaction aborted clearing tags in IndexedDB'));
     } catch (err) {
       reject(err);
     }
@@ -207,6 +209,7 @@ export async function replaceTagRegistry(tags: readonly NFCTagItem[]): Promise<v
 
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error || new Error('Transaction error replacing tag registry'));
+      tx.onabort = () => reject(tx.error || new Error('Transaction aborted replacing tag registry'));
     } catch (err) {
       reject(err);
     }

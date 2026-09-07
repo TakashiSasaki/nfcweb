@@ -2,6 +2,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { ErrorBoundary } from './ErrorBoundary';
 
 // Prevent pinch-to-zoom and gesture zooming across iOS Safari, Chrome, and desktop trackpads
 if (typeof window !== 'undefined') {
@@ -23,11 +24,25 @@ if (typeof window !== 'undefined') {
       e.preventDefault();
     }
   }, { passive: false });
+
+  // Forcibly unregister all service workers to clear out any old broken SWs
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        registration.unregister().then(success => {
+          console.log('Unregistered service worker:', success);
+        });
+      }
+    });
+  }
 }
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );
+
 

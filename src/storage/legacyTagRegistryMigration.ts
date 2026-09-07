@@ -55,46 +55,43 @@ export async function performLegacyStorageMigration(): Promise<MigrationResult> 
       }
 
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Check current tags store count
-        const currentCount = await new Promise<number>((resolve) => {
-          try {
-            const tx = db.transaction(STORE_TAGS, 'readonly');
-            const store = tx.objectStore(STORE_TAGS);
-            const req = store.count();
-            req.onsuccess = () => resolve(req.result || 0);
-            req.onerror = () => resolve(0);
-          } catch (_) {
-            resolve(0);
-          }
-        });
+        const tagsToMigrate: NFCTagItem[] = parsed
+          .map((t: any) => sanitizeTag({
+            ...t,
+            uid: canonicalizeUid(t.uid)
+          }))
+          .filter((t: NFCTagItem) => Boolean(t.uid));
 
-        // Only migrate if tags store in IndexedDB is empty
-        if (currentCount === 0) {
-          const tagsToMigrate: NFCTagItem[] = parsed
-            .map((t: any) => sanitizeTag({
-              ...t,
-              uid: canonicalizeUid(t.uid)
-            }))
-            .filter((t: NFCTagItem) => Boolean(t.uid));
+        if (tagsToMigrate.length > 0) {
+          await new Promise<void>((resolve, reject) => {
+            try {
+              const tx = db.transaction(STORE_TAGS, 'readwrite');
+              const store = tx.objectStore(STORE_TAGS);
+              const getAllReq = store.getAll();
 
-          if (tagsToMigrate.length > 0) {
-            await new Promise<void>((resolve, reject) => {
-              try {
-                const tx = db.transaction(STORE_TAGS, 'readwrite');
-                const store = tx.objectStore(STORE_TAGS);
+              getAllReq.onsuccess = () => {
+                const existingTags: NFCTagItem[] = getAllReq.result || [];
+                const existingUids = new Set(existingTags.map(et => canonicalizeUid(et.uid)));
+                let count = 0;
                 for (const tag of tagsToMigrate) {
-                  store.put(tag);
+                  if (!existingUids.has(tag.uid)) {
+                    store.put(tag);
+                    existingUids.add(tag.uid);
+                    count++;
+                  }
                 }
-                tx.oncomplete = () => {
-                  migratedTags = tagsToMigrate.length;
-                  resolve();
-                };
-                tx.onerror = () => reject(tx.error || new Error('Migration transaction failed'));
-              } catch (err) {
-                reject(err);
-              }
-            });
-          }
+                migratedTags = count;
+              };
+
+              tx.oncomplete = () => {
+                resolve();
+              };
+              tx.onerror = () => reject(tx.error || new Error('Migration transaction failed'));
+              tx.onabort = () => reject(tx.error || new Error('Migration transaction aborted'));
+            } catch (err) {
+              reject(err);
+            }
+          });
         }
 
         // Only cleanup localStorage tag registry after successful database transaction

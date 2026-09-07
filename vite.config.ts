@@ -9,16 +9,30 @@ export default defineConfig(() => {
     plugins: [
       react(), 
       tailwindcss(),
+      {
+        name: 'error-logger',
+        configureServer(server) {
+          server.middlewares.use('/__log_error', (req, res) => {
+            let body = '';
+            req.on('data', chunk => body += chunk);
+            req.on('end', () => {
+              require('fs').appendFileSync('browser_errors.log', body + '\n\n');
+              res.statusCode = 200;
+              res.end('ok');
+            });
+          });
+        }
+      },
       VitePWA({
         registerType: 'prompt',
         devOptions: {
-          enabled: true
+          enabled: false
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
           cleanupOutdatedCaches: true,
           clientsClaim: true,
-          skipWaiting: false,
+          skipWaiting: true,
         },
         manifest: {
           name: 'NFC Reader & Writer',

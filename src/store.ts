@@ -14,6 +14,7 @@ import {
 } from './storage/transactionalOperations';
 import { applyTagPhotoUpdate } from './storage/tagPhotoMutation';
 import { performLegacyStorageMigration } from './storage/legacyTagRegistryMigration';
+import { enqueueTagMutation } from './storage/tagMutationQueue';
 
 export { normalizeUid, canonicalizeUid, isValidCanonicalUid };
 
@@ -408,117 +409,129 @@ export function useAppStore() {
     const canonicalUid = canonicalizeUid(uid);
     if (!canonicalUid) return { success: false, error: 'Invalid UID' };
 
-    const now = Date.now();
-    const calculatedTagType = tagType || getTagTypeHint(canonicalUid);
+    return enqueueTagMutation(canonicalUid, async () => {
+      const now = Date.now();
+      const calculatedTagType = tagType || getTagTypeHint(canonicalUid);
 
-    const prev = tagsRef.current;
-    const existingIndex = prev.findIndex(t => canonicalizeUid(t.uid) === canonicalUid);
-    let updatedItem: NFCTagItem;
-    let nextTags: NFCTagItem[];
+      const prev = tagsRef.current;
+      const existingIndex = prev.findIndex(t => canonicalizeUid(t.uid) === canonicalUid);
+      let updatedItem: NFCTagItem;
+      let nextTags: NFCTagItem[];
 
-    if (existingIndex >= 0) {
-      const existing = prev[existingIndex];
-      updatedItem = {
-        ...existing,
-        uid: canonicalUid,
-        lastRead: now,
-        readCount: (existing.readCount || 1) + 1,
-        lastAction: action,
-        tagType: calculatedTagType || existing.tagType,
-        hasNdef: hasNdef !== undefined ? hasNdef : existing.hasNdef,
-        records: records !== undefined ? records : existing.records,
-        name: name !== undefined ? name : existing.name
-      };
-      // Re-order: Move updated tag to the top
-      const rest = prev.filter((_, idx) => idx !== existingIndex);
-      nextTags = [updatedItem, ...rest];
-    } else {
-      // New tag entry
-      updatedItem = {
-        uid: canonicalUid,
-        name: name || '',
-        firstSeen: now,
-        lastRead: now,
-        readCount: 1,
-        lastAction: action,
-        tagType: calculatedTagType,
-        hasNdef: hasNdef ?? (records && records.length > 0 ? true : false),
-        records: records || []
-      };
-      nextTags = [updatedItem, ...prev];
-    }
+      if (existingIndex >= 0) {
+        const existing = prev[existingIndex];
+        updatedItem = {
+          ...existing,
+          uid: canonicalUid,
+          lastRead: now,
+          readCount: (existing.readCount || 1) + 1,
+          lastAction: action,
+          tagType: calculatedTagType || existing.tagType,
+          hasNdef: hasNdef !== undefined ? hasNdef : existing.hasNdef,
+          records: records !== undefined ? records : existing.records,
+          name: name !== undefined ? name : existing.name
+        };
+        // Re-order: Move updated tag to the top
+        const rest = prev.filter((_, idx) => idx !== existingIndex);
+        nextTags = [updatedItem, ...rest];
+      } else {
+        // New tag entry
+        updatedItem = {
+          uid: canonicalUid,
+          name: name || '',
+          firstSeen: now,
+          lastRead: now,
+          readCount: 1,
+          lastAction: action,
+          tagType: calculatedTagType,
+          hasNdef: hasNdef ?? (records && records.length > 0 ? true : false),
+          records: records || []
+        };
+        nextTags = [updatedItem, ...prev];
+      }
 
-    try {
-      await saveTag(updatedItem);
-      setTags(nextTags);
-      return { success: true, item: updatedItem };
-    } catch (err: any) {
-      console.error('Failed to save tag to IndexedDB:', err);
-      return { success: false, error: err?.message || 'Failed to save tag to IndexedDB' };
-    }
+      try {
+        await saveTag(updatedItem);
+        setTags(nextTags);
+        return { success: true, item: updatedItem };
+      } catch (err: any) {
+        console.error('Failed to save tag to IndexedDB:', err);
+        return { success: false, error: err?.message || 'Failed to save tag to IndexedDB' };
+      }
+    });
   }, []);
 
   const updateTagName = useCallback(async (uid: string, name: string): Promise<{ success: boolean; error?: string }> => {
     const canon = canonicalizeUid(uid);
     if (!canon) return { success: false, error: 'Invalid UID' };
-    const prev = tagsRef.current;
-    const target = prev.find(t => canonicalizeUid(t.uid) === canon);
-    if (!target) return { success: false, error: 'Tag not found' };
-    const updated: NFCTagItem = { ...target, name };
-    try {
-      await saveTag(updated);
-      setTags(prev.map(t => canonicalizeUid(t.uid) === canon ? updated : t));
-      return { success: true };
-    } catch (err: any) {
-      console.error('Failed to update tag name in IndexedDB:', err);
-      return { success: false, error: err?.message || 'Failed to update tag name' };
-    }
+    return enqueueTagMutation(canon, async () => {
+      const prev = tagsRef.current;
+      const target = prev.find(t => canonicalizeUid(t.uid) === canon);
+      if (!target) return { success: false, error: 'Tag not found' };
+      const updated: NFCTagItem = { ...target, name };
+      try {
+        await saveTag(updated);
+        setTags(prev.map(t => canonicalizeUid(t.uid) === canon ? updated : t));
+        return { success: true };
+      } catch (err: any) {
+        console.error('Failed to update tag name in IndexedDB:', err);
+        return { success: false, error: err?.message || 'Failed to update tag name' };
+      }
+    });
   }, []);
 
   const updateTagNotes = useCallback(async (uid: string, notes: string): Promise<{ success: boolean; error?: string }> => {
     const canon = canonicalizeUid(uid);
     if (!canon) return { success: false, error: 'Invalid UID' };
-    const prev = tagsRef.current;
-    const target = prev.find(t => canonicalizeUid(t.uid) === canon);
-    if (!target) return { success: false, error: 'Tag not found' };
-    const updated: NFCTagItem = { ...target, notes };
-    try {
-      await saveTag(updated);
-      setTags(prev.map(t => canonicalizeUid(t.uid) === canon ? updated : t));
-      return { success: true };
-    } catch (err: any) {
-      console.error('Failed to update tag notes in IndexedDB:', err);
-      return { success: false, error: err?.message || 'Failed to update tag notes' };
-    }
+    return enqueueTagMutation(canon, async () => {
+      const prev = tagsRef.current;
+      const target = prev.find(t => canonicalizeUid(t.uid) === canon);
+      if (!target) return { success: false, error: 'Tag not found' };
+      const updated: NFCTagItem = { ...target, notes };
+      try {
+        await saveTag(updated);
+        setTags(prev.map(t => canonicalizeUid(t.uid) === canon ? updated : t));
+        return { success: true };
+      } catch (err: any) {
+        console.error('Failed to update tag notes in IndexedDB:', err);
+        return { success: false, error: err?.message || 'Failed to update tag notes' };
+      }
+    });
   }, []);
 
   const updateTagPhoto = useCallback(async (
     uid: string,
     update: PhotoUpdate
   ): Promise<{ success: boolean; error?: string }> => {
-    const result = await applyTagPhotoUpdate({
-      tags: tagsRef.current,
-      uid,
-      update,
-      onCommit: (persisted) => {
-        setTags(persisted);
-      }
+    const canon = canonicalizeUid(uid);
+    if (!canon) return { success: false, error: 'Invalid UID' };
+    return enqueueTagMutation(canon, async () => {
+      const result = await applyTagPhotoUpdate({
+        tags: tagsRef.current,
+        uid: canon,
+        update,
+        onCommit: (persisted) => {
+          setTags(persisted);
+        }
+      });
+      return { success: result.success, error: result.error };
     });
-    return { success: result.success, error: result.error };
   }, []);
 
   const deleteTag = useCallback(async (uid: string): Promise<{ success: boolean; error?: string }> => {
     const canon = canonicalizeUid(uid);
     if (!canon) return { success: false, error: 'Invalid UID' };
 
-    try {
-      await deleteTagTransactional(canon);
-      setTags(prev => prev.filter(t => canonicalizeUid(t.uid) !== canon));
-      return { success: true };
-    } catch (err: any) {
-      console.error('Failed to delete tag from IndexedDB:', err);
-      return { success: false, error: err?.message || 'Failed to delete tag' };
-    }
+    return enqueueTagMutation(canon, async () => {
+      try {
+        await deleteTagTransactional(canon);
+        setTags(prev => prev.filter(t => canonicalizeUid(t.uid) !== canon));
+        return { success: true };
+      } catch (err: any) {
+        console.error('Failed to delete tag from IndexedDB:', err);
+        return { success: false, error: err?.message || 'Failed to delete tag' };
+      }
+    });
   }, []);
 
   const clearAllTags = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
