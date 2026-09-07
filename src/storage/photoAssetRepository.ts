@@ -15,8 +15,8 @@ export interface StoredPhotoAsset {
   height?: number;
 }
 
-export function _resetDBForTesting(): void {
-  _resetUnifiedDBForTesting().catch(() => {});
+export async function _resetDBForTesting(): Promise<void> {
+  await _resetUnifiedDBForTesting();
 }
 
 export function generatePhotoAssetId(): string {

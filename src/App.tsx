@@ -10,6 +10,7 @@ import { ExportModal } from './ExportModal';
 import { ImportModal } from './ImportModal';
 import { DataSchemaModal } from './DataSchemaModal';
 import { SearchModal } from './SearchModal';
+import { StorageErrorState } from './StorageErrorState';
 import { usePWAUpdate } from './usePWAUpdate';
 import { ToastProvider, useToast } from './toast';
 
@@ -128,14 +129,15 @@ function AppContent() {
           ) : (
             <div className="flex items-center gap-2">
               <button
+                disabled={store.storageStatus !== 'ready'}
                 onClick={() => store.startScanning({
                   onSuccess: showSuccess,
                   onWarning: showWarning,
                   onInfo: showInfo,
                   onError: (err) => showNFCError(err, 'read')
                 })}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:from-blue-700 active:to-indigo-700 text-white shadow-md shadow-blue-900/30 transition-all cursor-pointer"
-                title="Start NFC Tag Scan"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:from-blue-700 active:to-indigo-700 text-white shadow-md shadow-blue-900/30 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                title={store.storageStatus === 'ready' ? 'Start NFC Tag Scan' : 'Local tag storage is not ready'}
                 aria-label="Start NFC Tag Scan"
               >
                 <Radio className="w-3.5 h-3.5 text-cyan-300" />
@@ -150,9 +152,14 @@ function AppContent() {
       <main className="flex-1 overflow-hidden p-0 bg-[#0F172A] w-full">
         {activeTab === 'tags' && (
           <div className="w-full h-full">
-            <TagsInfiniteListView 
-              store={store} 
-            />
+            {store.storageStatus === 'error' ? (
+              <StorageErrorState
+                error={store.storageError}
+                onRetry={store.retryStorageHydration}
+              />
+            ) : (
+              <TagsInfiniteListView store={store} />
+            )}
           </div>
         )}
 

@@ -17,6 +17,9 @@ export { normalizeUid, canonicalizeUid, isValidCanonicalUid };
 
 const defaultSettings: NFCSettings = { vibrateOnScan: true };
 
+export type StorageStatus = 'loading' | 'ready' | 'error';
+const STORAGE_HYDRATION_ERROR = 'Unable to load local tag data from IndexedDB.';
+
 export const NTAG_LIMITS = {
   NTAG213: 144,
   NTAG215: 504,
@@ -256,7 +259,10 @@ export const SAMPLE_NDEF_TEMPLATES: SampleTagTemplate[] = [
 
 export function useAppStore() {
   const [tags, setTags] = useState<NFCTagItem[]>([]);
-  const [isHydrated, setIsHydrated] = useState<boolean>(false);
+  const [storageStatus, setStorageStatus] = useState<StorageStatus>('loading');
+  const [storageError, setStorageError] = useState<string | null>(null);
+  const hydrationAttemptRef = useRef(0);
+  const isHydrated = storageStatus === 'ready';
   const tagsRef = useRef<NFCTagItem[]>([]);
   tagsRef.current = tags;
 
@@ -284,18 +290,32 @@ export function useAppStore() {
   const closeSearchModal = useCallback(() => setIsSearchModalOpen(false), []);
   const [isHeaderVisible, setIsHeaderVisible] = useState<boolean>(true);
 
-  useEffect(() => {
-    let isMounted = true;
-    getAllTags()
-      .then(dbTags => {
-        if (isMounted) setTags(dbTags);
-      })
-      .catch(err => console.error('Failed to hydrate tags from IndexedDB:', err))
-      .finally(() => {
-        if (isMounted) setIsHydrated(true);
-      });
-    return () => { isMounted = false; };
+  const hydrateStorage = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    const attempt = ++hydrationAttemptRef.current;
+    setStorageStatus('loading');
+    setStorageError(null);
+    try {
+      const dbTags = await getAllTags();
+      if (attempt !== hydrationAttemptRef.current) return { success: false, error: 'Storage hydration was superseded.' };
+      setTags(dbTags);
+      setStorageStatus('ready');
+      return { success: true };
+    } catch (err) {
+      console.error('Failed to hydrate tags from IndexedDB:', err);
+      if (attempt === hydrationAttemptRef.current) {
+        setStorageError(STORAGE_HYDRATION_ERROR);
+        setStorageStatus('error');
+      }
+      return { success: false, error: STORAGE_HYDRATION_ERROR };
+    }
   }, []);
+
+  useEffect(() => {
+    void hydrateStorage();
+    return () => {
+      hydrationAttemptRef.current += 1;
+    };
+  }, [hydrateStorage]);
 
   useEffect(() => {
     try {
@@ -688,6 +708,9 @@ export function useAppStore() {
 
   return {
     tags,
+    storageStatus,
+    storageError,
+    retryStorageHydration: hydrateStorage,
     isHydrated,
     upsertTag,
     updateTagName,
