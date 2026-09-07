@@ -1,30 +1,26 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { NFCLog, NFCSettings, NFCTagItem, EditableNDEFRecord, PhotoUpdate } from './types';
 import { normalizeUid, canonicalizeUid, isValidCanonicalUid } from './domain/uid';
-import { 
-  getAllTags,
-  saveTag,
-  sanitizeTag
-} from './storage/tagRepository';
+import { getAllTags, sanitizeTag } from './storage/tagRepository';
 import {
+  upsertTagTransactional,
+  patchTagTransactional,
+  updateTagPhotoTransactional,
   deleteTagTransactional,
   clearAllTagsTransactional,
   importRegistryTransactional,
   replaceTagRegistryTransactional
 } from './storage/transactionalOperations';
-import { applyTagPhotoUpdate } from './storage/tagPhotoMutation';
-import { performLegacyStorageMigration } from './storage/legacyTagRegistryMigration';
 import { enqueueTagMutation } from './storage/tagMutationQueue';
 
 export { normalizeUid, canonicalizeUid, isValidCanonicalUid };
 
 const defaultSettings: NFCSettings = { vibrateOnScan: true };
 
-// NTAG Boundary Constants (bytes)
 export const NTAG_LIMITS = {
-  NTAG213: 144, // Standard 144 Bytes user memory
-  NTAG215: 504, // 504 Bytes user memory (Amiibo standard)
-  NTAG216: 888  // 888 Bytes user memory (High capacity)
+  NTAG213: 144,
+  NTAG215: 504,
+  NTAG216: 888
 } as const;
 
 export interface NTAGCapacityAnalysis {
@@ -42,10 +38,8 @@ export interface NTAGCapacityAnalysis {
   detailDescription: string;
 }
 
-// Calculate NDEF binary encoding size in bytes including Type 2 Tag TLV and Record headers
 export function calculateNDEFByteSize(records: EditableNDEFRecord[]): number {
   if (!records || records.length === 0) return 0;
-  
   const textEncoder = new TextEncoder();
   let totalBytes = 0;
   let activeRecordsCount = 0;
@@ -53,25 +47,16 @@ export function calculateNDEFByteSize(records: EditableNDEFRecord[]): number {
   for (const record of records) {
     if (record.recordType === 'empty') continue;
     activeRecordsCount++;
-
     if (record.recordType === 'text') {
       const textUtf8Bytes = textEncoder.encode(record.data || '').length;
       const langBytes = textEncoder.encode(record.lang || 'en').length;
-      // Record header (3 bytes) + 'T' (1 byte) + status byte (1 byte) + lang bytes + text payload
       totalBytes += 5 + langBytes + textUtf8Bytes;
     } else if (record.recordType === 'url') {
-      // Record header (3 bytes) + 'U' (1 byte) + URI Identifier (1 byte) + URL payload
       let urlStr = record.data || '';
-      // Most NFC writers abbreviate http:// (0x03) or https:// (0x04) into 1-byte prefix
-      if (urlStr.startsWith('https://')) {
-        urlStr = urlStr.slice(8);
-      } else if (urlStr.startsWith('http://')) {
-        urlStr = urlStr.slice(7);
-      }
-      const urlUtf8Bytes = textEncoder.encode(urlStr).length;
-      totalBytes += 5 + urlUtf8Bytes;
+      if (urlStr.startsWith('https://')) urlStr = urlStr.slice(8);
+      else if (urlStr.startsWith('http://')) urlStr = urlStr.slice(7);
+      totalBytes += 5 + textEncoder.encode(urlStr).length;
     } else if (record.recordType === 'mime') {
-      // Record header (3 bytes) + mediaType bytes + MIME data bytes
       const mediaTypeBytes = textEncoder.encode(record.mediaType || 'application/json').length;
       const dataBytes = textEncoder.encode(record.data || '').length;
       totalBytes += 3 + mediaTypeBytes + dataBytes;
@@ -79,18 +64,11 @@ export function calculateNDEFByteSize(records: EditableNDEFRecord[]): number {
   }
 
   if (activeRecordsCount === 0) return 0;
-
-  // Add Type 2 Tag TLV wrapper overhead: 0x03 [Len] ... 0xFE (3 bytes)
-  const tlvOverhead = totalBytes > 254 ? 5 : 3;
-  return totalBytes + tlvOverhead;
+  return totalBytes + (totalBytes > 254 ? 5 : 3);
 }
 
-// Analyze size against NTAG213 (144B), NTAG215 (504B), and NTAG216 (888B) boundaries
 export function analyzeNTAGCapacity(bytesOrRecords: number | EditableNDEFRecord[]): NTAGCapacityAnalysis {
-  const bytes = typeof bytesOrRecords === 'number' 
-    ? bytesOrRecords 
-    : calculateNDEFByteSize(bytesOrRecords);
-
+  const bytes = typeof bytesOrRecords === 'number' ? bytesOrRecords : calculateNDEFByteSize(bytesOrRecords);
   const fitsNTAG213 = bytes <= NTAG_LIMITS.NTAG213;
   const fitsNTAG215 = bytes <= NTAG_LIMITS.NTAG215;
   const fitsNTAG216 = bytes <= NTAG_LIMITS.NTAG216;
@@ -103,12 +81,9 @@ export function analyzeNTAGCapacity(bytesOrRecords: number | EditableNDEFRecord[
 
   if (bytes === 0) {
     badgeLabel = '0 B (Empty)';
-    badgeColor = 'emerald';
     detailDescription = 'Empty data (0 Bytes) - writable to all NTAG chips';
   } else if (fitsNTAG213) {
-    recommendedChip = 'NTAG213';
     badgeLabel = `${bytes}B (NTAG213 OK)`;
-    badgeColor = 'emerald';
     detailDescription = `Fits NTAG213 / 215 / 216 (${bytes} / 144 B)`;
   } else if (fitsNTAG215) {
     recommendedChip = 'NTAG215';
@@ -143,7 +118,6 @@ export function analyzeNTAGCapacity(bytesOrRecords: number | EditableNDEFRecord[
   };
 }
 
-// Helper to determine tag type description from UID length
 export function getTagTypeHint(serialNumber?: string): string {
   if (!serialNumber) return 'Standard NFC Tag';
   const clean = serialNumber.replace(/[:-]/g, '');
@@ -155,36 +129,25 @@ export function getTagTypeHint(serialNumber?: string): string {
   return `${byteCount}-byte UID NFC Tag`;
 }
 
-// Convert raw Web NFC records into EditableNDEFRecord format
 export function parseRawNDEFToEditable(records: any[]): EditableNDEFRecord[] {
   if (!records || records.length === 0) return [];
   return records.map((record, index) => {
     const id = crypto.randomUUID ? crypto.randomUUID() : `rec-${Date.now()}-${index}`;
     const recordType = record.recordType || 'unknown';
-
     try {
       if (recordType === 'text') {
-        const textDecoder = new TextDecoder(record.encoding || 'utf-8');
-        const text = textDecoder.decode(record.data);
+        const text = new TextDecoder(record.encoding || 'utf-8').decode(record.data);
         return { id, recordType: 'text', data: text, lang: record.lang || 'en' };
       }
       if (recordType === 'url') {
-        const textDecoder = new TextDecoder();
-        const url = textDecoder.decode(record.data);
-        return { id, recordType: 'url', data: url };
+        return { id, recordType: 'url', data: new TextDecoder().decode(record.data) };
       }
       if (recordType === 'mime') {
-        const textDecoder = new TextDecoder();
-        const mimeData = textDecoder.decode(record.data);
-        return { id, recordType: 'mime', mediaType: record.mediaType || 'application/json', data: mimeData };
+        return { id, recordType: 'mime', mediaType: record.mediaType || 'application/json', data: new TextDecoder().decode(record.data) };
       }
-      if (recordType === 'empty') {
-        return { id, recordType: 'empty', data: '' };
-      }
+      if (recordType === 'empty') return { id, recordType: 'empty', data: '' };
       if (record.data) {
-        const textDecoder = new TextDecoder();
-        const unknownData = textDecoder.decode(record.data);
-        return { id, recordType: 'mime', mediaType: 'application/octet-stream', data: unknownData };
+        return { id, recordType: 'mime', mediaType: 'application/octet-stream', data: new TextDecoder().decode(record.data) };
       }
     } catch (err) {
       console.warn('NDEF record decode fallback:', err);
@@ -193,41 +156,15 @@ export function parseRawNDEFToEditable(records: any[]): EditableNDEFRecord[] {
   });
 }
 
-// Format EditableNDEFRecord list into NDEF write payload for Web NFC API
 export function formatNDEFPayloadForNFC(records: EditableNDEFRecord[]) {
   const active = records.filter(r => r.recordType !== 'empty');
-  if (active.length === 0) {
-    return { records: [{ recordType: 'empty' }] };
-  }
-
+  if (active.length === 0) return { records: [{ recordType: 'empty' }] };
   return {
     records: active.map(r => {
-      if (r.recordType === 'text') {
-        return {
-          recordType: 'text',
-          data: r.data || '',
-          lang: r.lang || 'en',
-          encoding: 'utf-8'
-        };
-      }
-      if (r.recordType === 'url') {
-        return {
-          recordType: 'url',
-          data: r.data || ''
-        };
-      }
-      if (r.recordType === 'mime') {
-        return {
-          recordType: 'mime',
-          mediaType: r.mediaType || 'application/json',
-          data: r.data || ''
-        };
-      }
-      return {
-        recordType: 'text',
-        data: r.data || '',
-        lang: 'en'
-      };
+      if (r.recordType === 'text') return { recordType: 'text', data: r.data || '', lang: r.lang || 'en', encoding: 'utf-8' };
+      if (r.recordType === 'url') return { recordType: 'url', data: r.data || '' };
+      if (r.recordType === 'mime') return { recordType: 'mime', mediaType: r.mediaType || 'application/json', data: r.data || '' };
+      return { recordType: 'text', data: r.data || '', lang: 'en' };
     })
   };
 }
@@ -305,9 +242,7 @@ export const SAMPLE_NDEF_TEMPLATES: SampleTagTemplate[] = [
     category: 'single',
     badge: '1 Record',
     description: 'Standard Web Link / Landing Page',
-    records: [
-      { id: 'rec-1', recordType: 'url', data: 'https://example.com/nfc-product' }
-    ]
+    records: [{ id: 'rec-1', recordType: 'url', data: 'https://example.com/nfc-product' }]
   },
   {
     id: 'single-text',
@@ -315,14 +250,11 @@ export const SAMPLE_NDEF_TEMPLATES: SampleTagTemplate[] = [
     category: 'single',
     badge: '1 Record',
     description: 'Simple Plain Text Message',
-    records: [
-      { id: 'rec-1', recordType: 'text', data: 'Hello from Web NFC Tag!', lang: 'en' }
-    ]
+    records: [{ id: 'rec-1', recordType: 'text', data: 'Hello from Web NFC Tag!', lang: 'en' }]
   }
 ];
 
 export function useAppStore() {
-  // Tags collection keyed/distinguished by canonical UID
   const [tags, setTags] = useState<NFCTagItem[]>([]);
   const [isHydrated, setIsHydrated] = useState<boolean>(false);
   const tagsRef = useRef<NFCTagItem[]>([]);
@@ -332,7 +264,7 @@ export function useAppStore() {
     try {
       const saved = localStorage.getItem('nfc_logs');
       return saved ? JSON.parse(saved) : [];
-    } catch (e) {
+    } catch {
       return [];
     }
   });
@@ -341,47 +273,32 @@ export function useAppStore() {
     try {
       const saved = localStorage.getItem('nfc_settings');
       return saved ? JSON.parse(saved) : defaultSettings;
-    } catch (e) {
+    } catch {
       return defaultSettings;
     }
   });
 
-  // Global Search Query and Search Dialog State
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
   const openSearchModal = useCallback(() => setIsSearchModalOpen(true), []);
   const closeSearchModal = useCallback(() => setIsSearchModalOpen(false), []);
-
-  // Header visibility state (auto-hides on mobile when scrolling down to maximize scroll viewport)
   const [isHeaderVisible, setIsHeaderVisible] = useState<boolean>(true);
 
-  // Storage Hydration & Safe Legacy Migration on Mount
   useEffect(() => {
     let isMounted = true;
-    async function hydrate() {
-      try {
-        await performLegacyStorageMigration().catch(err => console.warn('Legacy migration notice:', err));
-        const dbTags = await getAllTags();
-        if (isMounted) {
-          setTags(dbTags);
-          setIsHydrated(true);
-        }
-      } catch (err) {
-        console.error('Failed to hydrate tags from IndexedDB:', err);
-        if (isMounted) {
-          setIsHydrated(true);
-        }
-      }
-    }
-    hydrate();
-    return () => {
-      isMounted = false;
-    };
+    getAllTags()
+      .then(dbTags => {
+        if (isMounted) setTags(dbTags);
+      })
+      .catch(err => console.error('Failed to hydrate tags from IndexedDB:', err))
+      .finally(() => {
+        if (isMounted) setIsHydrated(true);
+      });
+    return () => { isMounted = false; };
   }, []);
 
   useEffect(() => {
     try {
-      // Keep most recent 500 logs in local storage
       localStorage.setItem('nfc_logs', JSON.stringify(logs.slice(0, 500)));
     } catch (e) {
       console.warn('localStorage quota warning for logs:', e);
@@ -396,7 +313,6 @@ export function useAppStore() {
     }
   }, [settings]);
 
-  // Record / Update a Tag by canonical UID
   const upsertTag = useCallback(async (params: {
     uid: string;
     records?: EditableNDEFRecord[];
@@ -405,57 +321,21 @@ export function useAppStore() {
     action?: 'read' | 'write' | 'erase';
     name?: string;
   }): Promise<{ success: boolean; item?: NFCTagItem; error?: string }> => {
-    const { uid, records, hasNdef, tagType, action = 'read', name } = params;
-    const canonicalUid = canonicalizeUid(uid);
+    const canonicalUid = canonicalizeUid(params.uid);
     if (!canonicalUid) return { success: false, error: 'Invalid UID' };
 
     return enqueueTagMutation(canonicalUid, async () => {
-      const now = Date.now();
-      const calculatedTagType = tagType || getTagTypeHint(canonicalUid);
-
-      const prev = tagsRef.current;
-      const existingIndex = prev.findIndex(t => canonicalizeUid(t.uid) === canonicalUid);
-      let updatedItem: NFCTagItem;
-      let nextTags: NFCTagItem[];
-
-      if (existingIndex >= 0) {
-        const existing = prev[existingIndex];
-        updatedItem = {
-          ...existing,
-          uid: canonicalUid,
-          lastRead: now,
-          readCount: (existing.readCount || 1) + 1,
-          lastAction: action,
-          tagType: calculatedTagType || existing.tagType,
-          hasNdef: hasNdef !== undefined ? hasNdef : existing.hasNdef,
-          records: records !== undefined ? records : existing.records,
-          name: name !== undefined ? name : existing.name
-        };
-        // Re-order: Move updated tag to the top
-        const rest = prev.filter((_, idx) => idx !== existingIndex);
-        nextTags = [updatedItem, ...rest];
-      } else {
-        // New tag entry
-        updatedItem = {
-          uid: canonicalUid,
-          name: name || '',
-          firstSeen: now,
-          lastRead: now,
-          readCount: 1,
-          lastAction: action,
-          tagType: calculatedTagType,
-          hasNdef: hasNdef ?? (records && records.length > 0 ? true : false),
-          records: records || []
-        };
-        nextTags = [updatedItem, ...prev];
-      }
-
       try {
-        await saveTag(updatedItem);
-        setTags(nextTags);
+        const updatedItem = await upsertTagTransactional({
+          ...params,
+          uid: canonicalUid,
+          action: params.action ?? 'read',
+          tagType: params.tagType || getTagTypeHint(canonicalUid)
+        });
+        setTags(prev => [updatedItem, ...prev.filter(t => canonicalizeUid(t.uid) !== canonicalUid)]);
         return { success: true, item: updatedItem };
       } catch (err: any) {
-        console.error('Failed to save tag to IndexedDB:', err);
+        console.error('Failed to upsert tag in IndexedDB:', err);
         return { success: false, error: err?.message || 'Failed to save tag to IndexedDB' };
       }
     });
@@ -465,16 +345,11 @@ export function useAppStore() {
     const canon = canonicalizeUid(uid);
     if (!canon) return { success: false, error: 'Invalid UID' };
     return enqueueTagMutation(canon, async () => {
-      const prev = tagsRef.current;
-      const target = prev.find(t => canonicalizeUid(t.uid) === canon);
-      if (!target) return { success: false, error: 'Tag not found' };
-      const updated: NFCTagItem = { ...target, name };
       try {
-        await saveTag(updated);
-        setTags(prev.map(t => canonicalizeUid(t.uid) === canon ? updated : t));
+        const updated = await patchTagTransactional(canon, { name });
+        setTags(prev => prev.map(t => canonicalizeUid(t.uid) === canon ? updated : t));
         return { success: true };
       } catch (err: any) {
-        console.error('Failed to update tag name in IndexedDB:', err);
         return { success: false, error: err?.message || 'Failed to update tag name' };
       }
     });
@@ -484,16 +359,11 @@ export function useAppStore() {
     const canon = canonicalizeUid(uid);
     if (!canon) return { success: false, error: 'Invalid UID' };
     return enqueueTagMutation(canon, async () => {
-      const prev = tagsRef.current;
-      const target = prev.find(t => canonicalizeUid(t.uid) === canon);
-      if (!target) return { success: false, error: 'Tag not found' };
-      const updated: NFCTagItem = { ...target, notes };
       try {
-        await saveTag(updated);
-        setTags(prev.map(t => canonicalizeUid(t.uid) === canon ? updated : t));
+        const updated = await patchTagTransactional(canon, { notes });
+        setTags(prev => prev.map(t => canonicalizeUid(t.uid) === canon ? updated : t));
         return { success: true };
       } catch (err: any) {
-        console.error('Failed to update tag notes in IndexedDB:', err);
         return { success: false, error: err?.message || 'Failed to update tag notes' };
       }
     });
@@ -506,29 +376,24 @@ export function useAppStore() {
     const canon = canonicalizeUid(uid);
     if (!canon) return { success: false, error: 'Invalid UID' };
     return enqueueTagMutation(canon, async () => {
-      const result = await applyTagPhotoUpdate({
-        tags: tagsRef.current,
-        uid: canon,
-        update,
-        onCommit: (persisted) => {
-          setTags(persisted);
-        }
-      });
-      return { success: result.success, error: result.error };
+      const result = await updateTagPhotoTransactional(canon, update);
+      if (!result.success || !result.tag) {
+        return { success: false, error: result.error || 'Failed to update item photo' };
+      }
+      setTags(prev => prev.map(t => canonicalizeUid(t.uid) === canon ? result.tag! : t));
+      return { success: true };
     });
   }, []);
 
   const deleteTag = useCallback(async (uid: string): Promise<{ success: boolean; error?: string }> => {
     const canon = canonicalizeUid(uid);
     if (!canon) return { success: false, error: 'Invalid UID' };
-
     return enqueueTagMutation(canon, async () => {
       try {
         await deleteTagTransactional(canon);
         setTags(prev => prev.filter(t => canonicalizeUid(t.uid) !== canon));
         return { success: true };
       } catch (err: any) {
-        console.error('Failed to delete tag from IndexedDB:', err);
         return { success: false, error: err?.message || 'Failed to delete tag' };
       }
     });
@@ -540,7 +405,6 @@ export function useAppStore() {
       setTags([]);
       return { success: true };
     } catch (err: any) {
-      console.error('Failed to clear tags from IndexedDB:', err);
       return { success: false, error: err?.message || 'Failed to clear tags' };
     }
   }, []);
@@ -551,19 +415,14 @@ export function useAppStore() {
   ): Promise<{ success: boolean; error?: string }> => {
     const sanitized = newTags.map(sanitizeTag);
     const result = await importRegistryTransactional(sanitized, mode);
-    if (!result.success) {
-      console.error('Failed to import tag registry to IndexedDB:', result.error);
-      return { success: false, error: result.error || 'Failed to import tags' };
-    }
+    if (!result.success) return { success: false, error: result.error || 'Failed to import tags' };
 
     if (mode === 'replace') {
-      setTags(sanitized.sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0)));
+      setTags([...sanitized].sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0)));
     } else {
       setTags(prev => {
         const map = new Map<string, NFCTagItem>();
-        for (const t of prev) {
-          map.set(canonicalizeUid(t.uid), t);
-        }
+        for (const t of prev) map.set(canonicalizeUid(t.uid), t);
         for (const t of sanitized) {
           const canon = canonicalizeUid(t.uid);
           const existing = map.get(canon);
@@ -576,7 +435,6 @@ export function useAppStore() {
         return Array.from(map.values()).sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0));
       });
     }
-
     return { success: true };
   }, []);
 
@@ -598,21 +456,15 @@ export function useAppStore() {
   const clearSampleTags = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
     const nonSampleTags = tagsRef.current.filter(t => !isLegacyOrTaggedSample(t));
     const result = await replaceTagRegistryTransactional(nonSampleTags);
-    if (!result.success) {
-      console.error('Failed to replace tag registry in IndexedDB:', result.error);
-      return { success: false, error: result.error };
-    }
+    if (!result.success) return { success: false, error: result.error || 'Failed to clear sample tags' };
     setTags(nonSampleTags);
     return { success: true };
   }, []);
 
-  // Developer utility to seed mock tags for stress-testing and multi-record validation
   const seedMockTags = useCallback(async (count: number = 50): Promise<{ success: boolean; error?: string }> => {
     const now = Date.now();
     const generated: NFCTagItem[] = [];
-
     const multiRecordTemplates = [
-      // 1. Smart Asset Tag (3 Records)
       {
         name: 'Office Asset Tag',
         tagType: 'NTAG215 (504B)',
@@ -622,7 +474,6 @@ export function useAppStore() {
           { id: `rec-mim-${i}`, recordType: 'mime', mediaType: 'application/json', data: `{"assetId":"AP-${10000 + i}","assignedTo":"User_${(i % 10) + 1}","status":"active"}` }
         ]
       },
-      // 2. Bilingual Smart Sign (2 Records)
       {
         name: 'Conference Room Smart Sign',
         tagType: 'NTAG213 / MIFARE Ultralight (7-byte UID)',
@@ -631,7 +482,6 @@ export function useAppStore() {
           { id: `rec-en-${i}`, recordType: 'text', data: `Executive Room ${(i % 8) + 1} (Video Conferencing)`, lang: 'en' }
         ]
       },
-      // 3. Digital Business Card / vCard (2 Records)
       {
         name: 'Digital Namecard (vCard)',
         tagType: 'NTAG215 (504B)',
@@ -640,7 +490,6 @@ export function useAppStore() {
           { id: `rec-vc-${i}`, recordType: 'mime', mediaType: 'text/vcard', data: `BEGIN:VCARD\nVERSION:3.0\nFN:Staff Member ${i + 1}\nTEL:+81-3-1234-${(1000 + i).toString().slice(0, 4)}\nEMAIL:staff${i + 1}@example.com\nEND:VCARD` }
         ]
       },
-      // 4. Logistics Bay & Telemetry (3 Records)
       {
         name: 'Warehouse Shelf Tag',
         tagType: 'NTAG215 (504B)',
@@ -650,7 +499,6 @@ export function useAppStore() {
           { id: `rec-mim-${i}`, recordType: 'mime', mediaType: 'application/json', data: `{"rackId":"RK-${i + 1}","tempZone":"ambient","maxCapacity":120}` }
         ]
       },
-      // 5. Wi-Fi Portal (2 Records)
       {
         name: 'Guest Wi-Fi Smart Point',
         tagType: 'NTAG213 / MIFARE Ultralight (7-byte UID)',
@@ -660,7 +508,6 @@ export function useAppStore() {
         ]
       }
     ];
-
     const singleRecordTexts = [
       'Inventory Item #A-4892',
       'Warehouse Bay 12 Shelf B',
@@ -668,7 +515,6 @@ export function useAppStore() {
       'Door Lock Sensor Office-3F',
       'Exhibition Hall Guide Key'
     ];
-
     const samplePhotos = [
       'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%231e293b"/><rect x="22" y="24" width="56" height="38" rx="4" fill="%230284c7"/><path d="M14 68 h72 a4 4 0 0 1 4 4 v2 H10 v-2 a4 4 0 0 1 4 -4 z" fill="%2394a3b8"/></svg>',
       'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="75" height="100" viewBox="0 0 75 100"><rect width="75" height="100" fill="%23312e81"/><circle cx="37.5" cy="38" r="18" fill="%23818cf8"/><path d="M15 88 C15 65 60 65 60 88 Z" fill="%23818cf8"/></svg>',
@@ -683,17 +529,12 @@ export function useAppStore() {
       const timeOffset = (count - i) * 60000;
       const scenario = i % 4;
       const photoUrl = i < samplePhotos.length ? samplePhotos[i] : undefined;
-
       if (scenario === 0 || scenario === 1) {
         const tpl = multiRecordTemplates[i % multiRecordTemplates.length];
         const recs = tpl.records(i);
-        const name = i === 0 
-          ? 'Office Asset Tag #1: High-Precision CNC Calibrator Unit' 
-          : `${tpl.name} #${i + 1}`;
-
         generated.push({
           uid: hexUid,
-          name,
+          name: i === 0 ? 'Office Asset Tag #1: High-Precision CNC Calibrator Unit' : `${tpl.name} #${i + 1}`,
           firstSeen: now - timeOffset - 3600000,
           lastRead: now - timeOffset,
           readCount: Math.floor(Math.random() * 6) + 1,
@@ -716,20 +557,7 @@ export function useAppStore() {
           lastAction: 'read',
           tagType: 'NTAG213 / MIFARE Ultralight (7-byte UID)',
           hasNdef: true,
-          records: isUrl ? [
-            {
-              id: `rec-url-${i}`,
-              recordType: 'url',
-              data: `https://example.com/asset/${1000 + i}`
-            }
-          ] : [
-            {
-              id: `rec-txt-${i}`,
-              recordType: 'text',
-              data: `${singleRecordTexts[i % singleRecordTexts.length]} (SN-${10000 + i})`,
-              lang: 'ja'
-            }
-          ],
+          records: isUrl ? [{ id: `rec-url-${i}`, recordType: 'url', data: `https://example.com/asset/${1000 + i}` }] : [{ id: `rec-txt-${i}`, recordType: 'text', data: `${singleRecordTexts[i % singleRecordTexts.length]} (SN-${10000 + i})`, lang: 'ja' }],
           isSample: true,
           photoUrl
         });
@@ -752,36 +580,24 @@ export function useAppStore() {
     }
 
     const result = await importRegistryTransactional(generated, 'merge');
-    if (!result.success) {
-      console.error('Failed to save seeded mock tags to IndexedDB:', result.error);
-      return { success: false, error: result.error };
-    }
-
+    if (!result.success) return { success: false, error: result.error || 'Failed to seed sample tags' };
     setTags(prev => {
       const map = new Map<string, NFCTagItem>();
-      for (const t of prev) {
-        map.set(canonicalizeUid(t.uid), t);
-      }
-      for (const t of generated) {
-        map.set(canonicalizeUid(t.uid), t);
-      }
+      for (const t of prev) map.set(canonicalizeUid(t.uid), t);
+      for (const t of generated) map.set(canonicalizeUid(t.uid), t);
       return Array.from(map.values()).sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0));
     });
-
     return { success: true };
   }, []);
 
   const addLog = useCallback((log: Omit<NFCLog, 'id' | 'timestamp'>) => {
     setLogs(prev => [{ ...log, id: crypto.randomUUID ? crypto.randomUUID() : `log-${Date.now()}`, timestamp: Date.now() }, ...prev]);
   }, []);
-
   const clearLogs = useCallback(() => setLogs([]), []);
   const deleteLog = useCallback((id: string) => setLogs(prev => prev.filter(l => l.id !== id)), []);
 
-  // Global Scanning Controller
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const scanAbortControllerRef = useRef<AbortController | null>(null);
-
   const stopScanning = useCallback(() => {
     if (scanAbortControllerRef.current) {
       scanAbortControllerRef.current.abort();
@@ -810,20 +626,15 @@ export function useAppStore() {
       scanAbortControllerRef.current = new AbortController();
       const signal = scanAbortControllerRef.current.signal;
       const ndef = new (window as any).NDEFReader();
-
       await ndef.scan({ signal });
 
-      ndef.onreading = (event: any) => {
+      ndef.onreading = async (event: any) => {
         const { message, serialNumber } = event;
         const tagIdentifier = serialNumber || `tag-${Date.now().toString(16)}`;
         const tagType = getTagTypeHint(serialNumber);
-
-        const rawRecords = message?.records || [];
-        const parsedRecords = parseRawNDEFToEditable(rawRecords);
+        const parsedRecords = parseRawNDEFToEditable(message?.records || []);
         const hasRecords = parsedRecords.length > 0 && parsedRecords.some(r => r.recordType !== 'empty');
-
-        // Upsert into Tag Cards Registry
-        upsertTag({
+        const persistResult = await upsertTag({
           uid: tagIdentifier,
           records: parsedRecords,
           hasNdef: hasRecords,
@@ -834,46 +645,41 @@ export function useAppStore() {
         addLog({
           action: 'read',
           serialNumber: tagIdentifier,
-          messageSummary: hasRecords
-            ? `Scanned ${parsedRecords.length} record(s) from UID: ${tagIdentifier}`
-            : `Scanned UID: ${tagIdentifier} (ID-Only / No NDEF)`,
+          messageSummary: hasRecords ? `Scanned ${parsedRecords.length} record(s) from UID: ${tagIdentifier}` : `Scanned UID: ${tagIdentifier} (ID-Only / No NDEF)`,
           rawRecords: parsedRecords
         });
-
         if (settings.vibrateOnScan && typeof navigator !== 'undefined' && navigator.vibrate) {
-          try { navigator.vibrate([100, 50, 100]); } catch (_) {}
+          try { navigator.vibrate([100, 50, 100]); } catch {}
         }
 
-        callbacks?.onSuccess?.('NFC Tag Scanned', `Card created/updated for UID [${tagIdentifier}]`);
+        if (persistResult.success) {
+          callbacks?.onSuccess?.('NFC Tag Scanned', `Card created/updated for UID [${tagIdentifier}]`);
+        } else {
+          callbacks?.onWarning?.('Tag Read, Registry Save Failed', persistResult.error || `Could not save UID [${tagIdentifier}] locally.`);
+        }
         stopScanning();
       };
 
-      ndef.onreadingerror = (errorEvent: any) => {
+      ndef.onreadingerror = async (errorEvent: any) => {
         const eventSerial = errorEvent?.serialNumber;
         if (eventSerial) {
-          const tagType = getTagTypeHint(eventSerial);
-          upsertTag({
+          const persistResult = await upsertTag({
             uid: eventSerial,
             records: [],
             hasNdef: false,
-            tagType,
+            tagType: getTagTypeHint(eventSerial),
             action: 'read'
           });
-
-          addLog({
-            action: 'read',
-            serialNumber: eventSerial,
-            messageSummary: `Tag Detected (ID Only: ${eventSerial})`,
-            rawRecords: []
-          });
-
-          callbacks?.onWarning?.('Tag Detected (ID Only)', `UID: ${eventSerial}`);
+          addLog({ action: 'read', serialNumber: eventSerial, messageSummary: `Tag Detected (ID Only: ${eventSerial})`, rawRecords: [] });
+          callbacks?.onWarning?.(
+            persistResult.success ? 'Tag Detected (ID Only)' : 'Tag Detected, Registry Save Failed',
+            persistResult.success ? `UID: ${eventSerial}` : (persistResult.error || `UID: ${eventSerial}`)
+          );
           stopScanning();
         } else {
           callbacks?.onError?.(new DOMException('Tag was removed too quickly or connection lost during scan', 'NetworkError'));
         }
       };
-
     } catch (err: any) {
       callbacks?.onError?.(err);
       setIsScanning(false);
@@ -911,4 +717,5 @@ export function useAppStore() {
     stopScanning
   };
 }
+
 export type AppStore = ReturnType<typeof useAppStore>;
