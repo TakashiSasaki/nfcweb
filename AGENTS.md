@@ -6,7 +6,14 @@
   - Minor and major versions are bumped only when explicitly requested by the user.
 
 - **PWA (Service Worker) in Development / Preview Environments**:
-  - **DANGER:** Never enable the PWA Service Worker in development (`devOptions.enabled: true` in `vite.config.ts`) or implement aggressive update/reload logic (like automatically calling `window.location.reload()` on `controllerchange`) within the AI Studio preview iframe.
-  - **Reason:** Doing so can trigger a catastrophic infinite reload loop. The frequent auto-rebuilds in the preview environment cause the Service Worker to constantly detect updates, fire the reload logic, and immediately trigger another update. This will bombard the server with requests, resulting in a `429 Too Many Requests (Rate exceeded)` error, which manifests as a completely blank white screen for the user.
-  - **Avoid `Clear-Site-Data: "executionContexts"`:** If you need to clear a rogue Service Worker, do NOT use the HTTP header `Clear-Site-Data: "executionContexts"`. In an iframe environment like AI Studio's preview, this forces the iframe to continuously reload itself, causing the preview pane to permanently stall on "Loading your app".
-  - **Correct Mitigation:** If a rogue Service Worker is causing loops, clear it via client-side JavaScript in the entry point (e.g., `src/main.tsx`) by calling `navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()))`. Ensure `devOptions.enabled: false` remains set in the Vite PWA config during development.
+  - **DANGER:** Never enable the PWA Service Worker in development (`devOptions.enabled: true` in `vite.config.ts`) or implement aggressive update/reload logic (such as automatically calling `window.location.reload()` on `controllerchange`) within the AI Studio preview iframe.
+  - **Reason:** Frequent preview rebuilds can create a Service Worker update/reload loop, bombard the preview server with requests, and result in `429 Too Many Requests` or a blank preview.
+  - **Avoid `Clear-Site-Data: "executionContexts"`:** Do not use this header as a preview recovery mechanism; in an iframe it can itself cause repeated reloads.
+  - **Recovery must be preview-only and explicit:** Never unregister all Service Workers from normal production startup code. If a rogue preview Service Worker must be removed, use an explicit development-only recovery action or browser/site-data cleanup that cannot run in the production bundle/runtime.
+  - Keep `devOptions.enabled: false` in the Vite PWA config for development/preview. Production PWA registration, caching, offline behavior, and update lifecycle must remain intact.
+
+- **Storage Architecture (pre-production breaking-change policy)**:
+  - `nfcweb_db` is the sole authority for persisted tag and local photo data.
+  - Do not add compatibility writers or runtime fallbacks for the removed `nfc_tags_registry` localStorage registry or the removed legacy photo database.
+  - Internal storage APIs do not require backward compatibility. Prefer a clean breaking change over introducing transitional bridges.
+  - Tag/photo consistency-critical changes must use the transactional operations layer, and user-visible success must follow durable IndexedDB transaction completion.
