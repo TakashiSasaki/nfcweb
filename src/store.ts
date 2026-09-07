@@ -3,6 +3,7 @@ import { NFCLog, NFCSettings, NFCTagItem, EditableNDEFRecord, PhotoUpdate } from
 import { normalizeUid, canonicalizeUid, isValidCanonicalUid } from './domain/uid';
 import { loadTagRegistry, saveTagRegistry, clearTagRegistry, commitTagRegistry } from './storage/tagRegistryStorage';
 import { deletePhotoAsset, deletePhotoAssets } from './storage/photoAssetStorage';
+import { applyTagPhotoUpdate } from './storage/tagPhotoMutation';
 
 export { normalizeUid, canonicalizeUid, isValidCanonicalUid };
 
@@ -429,66 +430,15 @@ export function useAppStore() {
     uid: string,
     update: PhotoUpdate
   ): Promise<{ success: boolean; error?: string }> => {
-    const canon = canonicalizeUid(uid);
-    if (!canon) {
-      return { success: false, error: 'Invalid tag UID' };
-    }
-
-    const currentTag = tags.find(t => canonicalizeUid(t.uid) === canon);
-    if (!currentTag) {
-      if (update.photoAssetId) {
-        await deletePhotoAsset(update.photoAssetId).catch(() => {});
+    const result = await applyTagPhotoUpdate({
+      tags,
+      uid,
+      update,
+      onCommit: (persisted) => {
+        setTags(persisted);
       }
-      return { success: false, error: `Tag with UID [${uid}] not found` };
-    }
-
-    const oldAssetId = currentTag.photoAssetId;
-    const newAssetId = update.photoAssetId;
-
-    // Construct candidate registry with explicit photo updates
-    const candidateTags = tags.map(t => {
-      if (canonicalizeUid(t.uid) === canon) {
-        const next: NFCTagItem = { ...t };
-        if (update.photoAssetId !== undefined) {
-          if (update.photoAssetId === null) {
-            delete next.photoAssetId;
-          } else {
-            next.photoAssetId = update.photoAssetId;
-          }
-        }
-        if (update.photoUrl !== undefined) {
-          if (update.photoUrl === null) {
-            delete next.photoUrl;
-          } else {
-            next.photoUrl = update.photoUrl;
-          }
-        }
-        return next;
-      }
-      return t;
     });
-
-    // Explicit persistence boundary: commit to storage FIRST
-    const commitResult = commitTagRegistry(candidateTags, (persisted) => {
-      setTags(persisted);
-    });
-
-    if (!commitResult.success) {
-      // Rollback newly uploaded asset if metadata persistence failed
-      if (newAssetId && newAssetId !== oldAssetId) {
-        await deletePhotoAsset(newAssetId).catch(() => {});
-      }
-      return { success: false, error: commitResult.error || 'Failed to persist tag photo metadata' };
-    }
-
-    // Registry persistence succeeded: clean up previous asset if replaced or removed
-    if (oldAssetId && oldAssetId !== newAssetId) {
-      deletePhotoAsset(oldAssetId).catch(err => {
-        console.warn('Failed to clean up old photo asset from IndexedDB:', err);
-      });
-    }
-
-    return { success: true };
+    return { success: result.success, error: result.error };
   }, [tags]);
 
   const deleteTag = useCallback((uid: string) => {

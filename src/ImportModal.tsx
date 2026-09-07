@@ -211,7 +211,7 @@ export function ImportModal({
               Importing modifies only the browser's local tag registry. It never performs wireless transmission or writing to physical NFC hardware tags.
             </div>
             <div className="text-slate-400">
-              Canonical v1 imports tag metadata only and do not import item photos.
+              Canonical v1 import files contain tag metadata only and do not include item photos.
             </div>
           </div>
         </div>

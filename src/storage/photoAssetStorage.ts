@@ -268,12 +268,7 @@ export async function normalizeImage(
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          return {
-            blob: fileOrBlob,
-            width,
-            height,
-            mimeType: outputType
-          };
+          throw new Error('Canvas 2D rendering context is not available');
         }
         ctx.drawImage(bitmap, 0, 0, width, height);
         const normalizedBlob = await new Promise<Blob | null>((resolve) => {
@@ -283,8 +278,11 @@ export async function normalizeImage(
             resolve(null);
           }
         });
+        if (!normalizedBlob) {
+          throw new Error('Failed to encode normalized image to Blob format');
+        }
         return {
-          blob: normalizedBlob || fileOrBlob,
+          blob: normalizedBlob,
           width,
           height,
           mimeType: outputType
@@ -296,18 +294,13 @@ export async function normalizeImage(
       if (fileOrBlob.size === 0 || err?.name === 'InvalidStateError') {
         throw new Error('Failed to decode image data. Please provide a valid image format.');
       }
-      // If createImageBitmap fails for environmental / mock reasons, fall through to Image
+      // If createImageBitmap fails for environmental / format reasons, fall through to Image
     }
   }
 
   // Strategy 2: HTMLImageElement fallback (Image constructor)
   if (typeof Image === 'undefined') {
-    return {
-      blob: fileOrBlob,
-      width: 0,
-      height: 0,
-      mimeType: outputType
-    };
+    throw new Error('Image decoding is not supported in this environment');
   }
 
   return new Promise((resolve, reject) => {
@@ -320,22 +313,12 @@ export async function normalizeImage(
       return reject(new Error('Failed to create object URL for image file.'));
     }
 
-    let isSettled = false;
-    const timeoutTimer = setTimeout(() => {
-      if (isSettled) return;
-      isSettled = true;
-      cleanup();
-      // Fallback gracefully in environments where image decoding does not complete (e.g. jsdom / mock)
-      resolve({
-        blob: fileOrBlob,
-        width: 0,
-        height: 0,
-        mimeType: outputType
-      });
-    }, 400);
+    if (!objectUrl) {
+      return reject(new Error('Failed to create object URL for image file.'));
+    }
 
+    let isSettled = false;
     const cleanup = () => {
-      clearTimeout(timeoutTimer);
       if (objectUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
         try {
           URL.revokeObjectURL(objectUrl);
@@ -353,12 +336,7 @@ export async function normalizeImage(
       const naturalH = img.naturalHeight || img.height;
 
       if (!naturalW || !naturalH) {
-        resolve({
-          blob: fileOrBlob,
-          width: 0,
-          height: 0,
-          mimeType: outputType
-        });
+        reject(new Error('Failed to decode image dimensions.'));
         return;
       }
 
@@ -368,12 +346,7 @@ export async function normalizeImage(
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        resolve({
-          blob: fileOrBlob,
-          width,
-          height,
-          mimeType: outputType
-        });
+        reject(new Error('Canvas 2D rendering context is not available'));
         return;
       }
 
@@ -381,8 +354,12 @@ export async function normalizeImage(
       if (typeof canvas.toBlob === 'function') {
         canvas.toBlob(
           (blob) => {
+            if (!blob) {
+              reject(new Error('Failed to encode normalized image to Blob format'));
+              return;
+            }
             resolve({
-              blob: blob || fileOrBlob,
+              blob,
               width,
               height,
               mimeType: outputType
@@ -392,12 +369,7 @@ export async function normalizeImage(
           quality
         );
       } else {
-        resolve({
-          blob: fileOrBlob,
-          width,
-          height,
-          mimeType: outputType
-        });
+        reject(new Error('Canvas toBlob is not supported'));
       }
     };
 
@@ -408,20 +380,7 @@ export async function normalizeImage(
       reject(new Error('Failed to load image file for normalization. Please provide a valid image format.'));
     };
 
-    if (objectUrl) {
-      img.src = objectUrl;
-    } else {
-      if (!isSettled) {
-        isSettled = true;
-        cleanup();
-        resolve({
-          blob: fileOrBlob,
-          width: 0,
-          height: 0,
-          mimeType: outputType
-        });
-      }
-    }
+    img.src = objectUrl;
   });
 }
 
