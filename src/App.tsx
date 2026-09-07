@@ -6,7 +6,9 @@ import { TagsInfiniteListView } from './TagsInfiniteListView';
 import { DebugView } from './DebugView';
 import { Modal } from './Modal';
 import { NavigationDrawer } from './NavigationDrawer';
-import { ExportPlaceholderModal, ImportPlaceholderModal } from './DataPlaceholderModals';
+import { ExportModal } from './ExportModal';
+import { ImportModal } from './ImportModal';
+import { DataSchemaModal } from './DataSchemaModal';
 import { usePWAUpdate } from './usePWAUpdate';
 import { APP_VERSION_TAG } from './version';
 import { ToastProvider, useToast } from './toast';
@@ -31,8 +33,9 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState<'tags' | 'debug'>(getRouteFromUrl);
   const [showQRModal, setShowQRModal] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isExportPlaceholderOpen, setIsExportPlaceholderOpen] = useState(false);
-  const [isImportPlaceholderOpen, setIsImportPlaceholderOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isDataSchemaOpen, setIsDataSchemaOpen] = useState(false);
 
   // Sync navigation with URL hash & browser history
   const navigateTo = useCallback((tab: 'tags' | 'debug') => {
@@ -195,25 +198,36 @@ function AppContent() {
         onClose={() => setIsDrawerOpen(false)}
         activeTab={activeTab}
         onNavigate={navigateTo}
-        onOpenExportPlaceholder={() => setIsExportPlaceholderOpen(true)}
-        onOpenImportPlaceholder={() => setIsImportPlaceholderOpen(true)}
+        onOpenExport={() => setIsExportOpen(true)}
+        onOpenImport={() => setIsImportOpen(true)}
+        onOpenDataSchema={() => setIsDataSchemaOpen(true)}
         onOpenQRModal={() => setShowQRModal(true)}
         onSeedSamples={() => store.seedMockTags(20)}
         tagsCount={store.tags.length}
         isScanning={store.isScanning}
       />
 
-      {/* Export UI Placeholder Modal */}
-      <ExportPlaceholderModal
-        isOpen={isExportPlaceholderOpen}
-        onClose={() => setIsExportPlaceholderOpen(false)}
-        tagsCount={store.tags.length}
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        tags={store.tags}
+        onOpenSchema={() => setIsDataSchemaOpen(true)}
       />
 
-      {/* Import UI Placeholder Modal */}
-      <ImportPlaceholderModal
-        isOpen={isImportPlaceholderOpen}
-        onClose={() => setIsImportPlaceholderOpen(false)}
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        localTags={store.tags}
+        onCommitImport={store.importTagsRegistry}
+        onOpenSchema={() => setIsDataSchemaOpen(true)}
+      />
+
+      {/* Data Schema Modal */}
+      <DataSchemaModal
+        isOpen={isDataSchemaOpen}
+        onClose={() => setIsDataSchemaOpen(false)}
       />
     </div>
   );

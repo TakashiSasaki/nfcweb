@@ -456,6 +456,22 @@ export function useAppStore() {
     }
   }, []);
 
+  const importTagsRegistry = useCallback((newTags: NFCTagItem[]): { success: boolean; error?: string } => {
+    try {
+      // Validate storage quota write before updating React state
+      const serialized = JSON.stringify(newTags);
+      localStorage.setItem('nfc_tags_registry', serialized);
+      setTags(newTags);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Failed to persist imported tags registry:', err);
+      return { 
+        success: false, 
+        error: err?.message || 'ストレージの容量制限(QuotaExceededError)または書き込みエラーが発生しました。' 
+      };
+    }
+  }, []);
+
   const isLegacyOrTaggedSample = (t: NFCTagItem) => {
     if (t.isSample) return true;
     if (t.notes && (t.notes.includes('sample') || t.notes.includes('Multi-record sample') || t.notes.includes('Unformatted / ID-only hardware tag'))) return true;
@@ -726,6 +742,7 @@ export function useAppStore() {
     updateTagNotes,
     deleteTag,
     clearAllTags,
+    importTagsRegistry,
     seedMockTags,
     clearSampleTags,
     logs,

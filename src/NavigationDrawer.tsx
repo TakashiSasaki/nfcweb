@@ -13,7 +13,8 @@ import {
   Menu,
   QrCode,
   Clock,
-  Info
+  Info,
+  FileCode
 } from 'lucide-react';
 import { APP_VERSION_TAG } from './version';
 
@@ -22,8 +23,9 @@ export interface NavigationDrawerProps {
   onClose: () => void;
   activeTab: 'tags' | 'debug';
   onNavigate: (tab: 'tags' | 'debug') => void;
-  onOpenExportPlaceholder: () => void;
-  onOpenImportPlaceholder: () => void;
+  onOpenExport: () => void;
+  onOpenImport: () => void;
+  onOpenDataSchema: () => void;
   onOpenQRModal: () => void;
   onSeedSamples?: () => void;
   tagsCount: number;
@@ -35,8 +37,9 @@ export function NavigationDrawer({
   onClose,
   activeTab,
   onNavigate,
-  onOpenExportPlaceholder,
-  onOpenImportPlaceholder,
+  onOpenExport,
+  onOpenImport,
+  onOpenDataSchema,
   onOpenQRModal,
   onSeedSamples,
   tagsCount,
@@ -165,17 +168,17 @@ export function NavigationDrawer({
               <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
                 データ管理 (Data)
               </span>
-              <span className="text-[10px] text-amber-400/90 font-medium bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-                UI枠
+              <span className="text-[10px] text-emerald-400/90 font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                v1
               </span>
             </div>
 
-            {/* Export Placeholder Entry */}
+            {/* Export Entry */}
             <button
               type="button"
               onClick={() => {
                 onClose();
-                onOpenExportPlaceholder();
+                onOpenExport();
               }}
               className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800/80 hover:text-white transition-all cursor-pointer group border border-transparent hover:border-slate-700"
             >
@@ -188,18 +191,18 @@ export function NavigationDrawer({
                     <span>エクスポート</span>
                     <span className="text-[10px] font-normal text-slate-400 font-mono">(Export)</span>
                   </div>
-                  <p className="text-[10px] text-slate-400 truncate">タグデータ出力 (JSON / CSV)</p>
+                  <p className="text-[10px] text-slate-400 truncate">タグ台帳の出力 (Canonical v1 JSON)</p>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 flex-shrink-0" />
             </button>
 
-            {/* Import Placeholder Entry */}
+            {/* Import Entry */}
             <button
               type="button"
               onClick={() => {
                 onClose();
-                onOpenImportPlaceholder();
+                onOpenImport();
               }}
               className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800/80 hover:text-white transition-all cursor-pointer group border border-transparent hover:border-slate-700"
             >
@@ -212,7 +215,31 @@ export function NavigationDrawer({
                     <span>インポート</span>
                     <span className="text-[10px] font-normal text-slate-400 font-mono">(Import)</span>
                   </div>
-                  <p className="text-[10px] text-slate-400 truncate">バックアップ復元・読み込み</p>
+                  <p className="text-[10px] text-slate-400 truncate">バックアップ復元 (マージ / 置換)</p>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 flex-shrink-0" />
+            </button>
+
+            {/* Data Schema Entry */}
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenDataSchema();
+              }}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800/80 hover:text-white transition-all cursor-pointer group border border-transparent hover:border-slate-700"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/25 flex items-center justify-center text-cyan-400 group-hover:scale-105 transition-transform flex-shrink-0">
+                  <FileCode className="w-4 h-4" />
+                </div>
+                <div className="text-left min-w-0">
+                  <div className="truncate text-white font-medium flex items-center gap-1.5">
+                    <span>データ仕様・スキーマ</span>
+                    <span className="text-[10px] font-normal text-slate-400 font-mono">(Schema)</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 truncate">JSON Schema (Draft 2020-12) 仕様書</p>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 flex-shrink-0" />

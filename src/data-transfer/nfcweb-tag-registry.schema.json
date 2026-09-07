@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://takashisasaki.github.io/nfcweb/schemas/v1/nfcweb-tag-registry.schema.json",
+  "title": "NFCWeb Tag Registry Interchange Schema",
+  "description": "Canonical v1 interchange format for the NFCWeb NFC tag registry backup and migration.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schemaVersion",
+    "exportedAt",
+    "appVersion",
+    "tags"
+  ],
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "nfcweb-tag-registry",
+      "description": "Identifier of the data interchange format."
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Interchange schema specification version. Incremented for breaking schema changes."
+    },
+    "exportedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of export generation."
+    },
+    "appVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Application release version recorded at export time for provenance."
+    },
+    "tags": {
+      "type": "array",
+      "description": "Collection of NFC tag registry entries.",
+      "items": {
+        "$ref": "#/$defs/NFCTagItem"
+      }
+    }
+  },
+  "$defs": {
+    "NFCTagItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uid",
+        "firstSeen",
+        "lastRead",
+        "readCount",
+        "hasNdef",
+        "records"
+      ],
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Normalized or raw hardware serial number / UID of the NFC tag."
+        },
+        "name": {
+          "type": "string",
+          "description": "Optional user-assigned name or nickname for the tag."
+        },
+        "firstSeen": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Epoch timestamp in milliseconds when tag was first discovered."
+        },
+        "lastRead": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Epoch timestamp in milliseconds of the most recent read."
+        },
+        "readCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of times this tag has been read."
+        },
+        "lastAction": {
+          "type": "string",
+          "enum": ["read", "write", "erase"],
+          "description": "Most recent action performed with this tag."
+        },
+        "tagType": {
+          "type": "string",
+          "description": "Hardware IC hint (e.g. NTAG213, MIFARE Ultralight)."
+        },
+        "hasNdef": {
+          "type": "boolean",
+          "description": "Whether the tag has active formatted NDEF records."
+        },
+        "records": {
+          "type": "array",
+          "description": "Array of NDEF records stored on this tag.",
+          "items": {
+            "$ref": "#/$defs/EditableNDEFRecord"
+          }
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional user notes or remarks."
+        },
+        "isSample": {
+          "type": "boolean",
+          "description": "Flag indicating if this tag is a simulated/mock sample."
+        }
+      }
+    },
+    "EditableNDEFRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "recordType",
+        "data"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique identifier for this record."
+        },
+        "recordType": {
+          "type": "string",
+          "enum": ["text", "url", "mime", "empty"],
+          "description": "Type of NDEF record."
+        },
+        "data": {
+          "type": "string",
+          "description": "Payload data encoded as text, URL, or serialized MIME content."
+        },
+        "mediaType": {
+          "type": "string",
+          "description": "MIME media type specification (required for mime records)."
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code for text records (e.g. ja, en)."
+        },
+        "encoding": {
+          "type": "string",
+          "description": "Text encoding (e.g. utf-8)."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "recordType": {
+                "const": "mime"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "mediaType"
+            ],
+            "properties": {
+              "mediaType": {
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

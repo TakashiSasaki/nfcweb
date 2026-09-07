@@ -23,6 +23,7 @@ import { APP_VERSION_TAG } from './version';
 import { useToast } from './toast';
 import { NTAG_LIMITS, SAMPLE_NDEF_TEMPLATES } from './store';
 import { Modal } from './Modal';
+import { buildTagRegistryExportV1, serializeExportDocument } from './data-transfer';
 
 interface DebugViewProps {
   store: any;
@@ -105,9 +106,11 @@ export function DebugView({ store }: DebugViewProps) {
   };
 
   const handleExportTagsJson = () => {
-    navigator.clipboard.writeText(JSON.stringify(tags, null, 2)).then(() => {
+    const doc = buildTagRegistryExportV1(tags, APP_VERSION_TAG);
+    const jsonStr = serializeExportDocument(doc);
+    navigator.clipboard.writeText(jsonStr).then(() => {
       setCopiedInfo('Tags JSON copied');
-      showSuccess('Registry Exported', `Copied ${tags.length} tag records as JSON.`);
+      showSuccess('Registry Exported (v1)', `Copied ${tags.length} tag records as Canonical v1 JSON.`);
       setTimeout(() => setCopiedInfo(null), 2000);
     });
   };
