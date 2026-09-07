@@ -1,9 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { NFCLog, NFCSettings, NFCTagItem, EditableNDEFRecord, PhotoUpdate } from './types';
 import { normalizeUid, canonicalizeUid, isValidCanonicalUid } from './domain/uid';
-import { loadTagRegistry, saveTagRegistry, clearTagRegistry, commitTagRegistry } from './storage/tagRegistryStorage';
+import { 
+  loadTagRegistry, 
+  saveTagRegistry, 
+  clearTagRegistry, 
+  commitTagRegistry,
+  getAllTags,
+  replaceTagRegistry,
+  clearAllTags as clearAllTagsFromDB,
+  deleteTag as deleteTagFromDB
+} from './storage/tagRegistryStorage';
 import { deletePhotoAsset, deletePhotoAssets } from './storage/photoAssetStorage';
 import { applyTagPhotoUpdate } from './storage/tagPhotoMutation';
+import { performLegacyStorageMigration } from './storage/legacyTagRegistryMigration';
 
 export { normalizeUid, canonicalizeUid, isValidCanonicalUid };
 
@@ -221,7 +231,6 @@ export function formatNDEFPayloadForNFC(records: EditableNDEFRecord[]) {
   };
 }
 
-
 export interface SampleTagTemplate {
   id: string;
   name: string;
@@ -286,7 +295,7 @@ export const SAMPLE_NDEF_TEMPLATES: SampleTagTemplate[] = [
     description: 'Guest Portal Web URL + Wi-Fi Credentials Payload',
     records: [
       { id: 'rec-1', recordType: 'url', data: 'https://wifi-portal.hotel-guest.com/welcome' },
-      { id: 'rec-2', recordType: 'text', data: 'WIFI:S:Guest_5G;T:WPA;P:Welcome2026!;;', lang: 'en' }
+      { id: 'rec-2', recordType: 'text', data: 'WIFI:S:Guest_Network_1;T:WPA;P:Welcome2026!;;', lang: 'en' }
     ]
   },
   {
@@ -314,6 +323,7 @@ export const SAMPLE_NDEF_TEMPLATES: SampleTagTemplate[] = [
 export function useAppStore() {
   // Tags collection keyed/distinguished by canonical UID
   const [tags, setTags] = useState<NFCTagItem[]>(() => loadTagRegistry());
+  const [isHydrated, setIsHydrated] = useState<boolean>(false);
 
   const [logs, setLogs] = useState<NFCLog[]>(() => {
     try {
@@ -342,10 +352,39 @@ export function useAppStore() {
   // Header visibility state (auto-hides on mobile when scrolling down to maximize scroll viewport)
   const [isHeaderVisible, setIsHeaderVisible] = useState<boolean>(true);
 
-  // Persist tags to localStorage using unified storage abstraction
+  // Storage Hydration & Safe Legacy Migration on Mount
   useEffect(() => {
-    saveTagRegistry(tags);
-  }, [tags]);
+    let isMounted = true;
+    async function hydrate() {
+      try {
+        await performLegacyStorageMigration().catch(err => console.warn('Legacy migration notice:', err));
+        const dbTags = await getAllTags();
+        if (isMounted) {
+          if (dbTags.length > 0) {
+            setTags(dbTags);
+          }
+          setIsHydrated(true);
+        }
+      } catch (err) {
+        console.error('Failed to hydrate tags from IndexedDB:', err);
+        if (isMounted) {
+          setIsHydrated(true);
+        }
+      }
+    }
+    hydrate();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Auto-persist tag changes to IndexedDB once hydrated
+  useEffect(() => {
+    if (!isHydrated) return;
+    replaceTagRegistry(tags).catch(err => {
+      console.error('Failed to persist tags to IndexedDB:', err);
+    });
+  }, [tags, isHydrated]);
 
   useEffect(() => {
     try {
@@ -448,11 +487,12 @@ export function useAppStore() {
     const target = tags.find(t => canonicalizeUid(t.uid) === canon);
     const candidateTags = tags.filter(t => canonicalizeUid(t.uid) !== canon);
 
-    const commitResult = commitTagRegistry(candidateTags, (persisted) => {
-      setTags(persisted);
+    setTags(candidateTags);
+    deleteTagFromDB(canon).catch(err => {
+      console.warn('Failed to delete tag from IndexedDB:', err);
     });
 
-    if (commitResult.success && target?.photoAssetId) {
+    if (target?.photoAssetId) {
       deletePhotoAsset(target.photoAssetId).catch(err => {
         console.warn('Failed to clean up deleted tag photo asset:', err);
       });
@@ -461,8 +501,10 @@ export function useAppStore() {
 
   const clearAllTags = useCallback(() => {
     const assetIds = tags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id));
-    clearTagRegistry();
     setTags([]);
+    clearAllTagsFromDB().catch(err => {
+      console.warn('Failed to clear tags from IndexedDB:', err);
+    });
 
     if (assetIds.length > 0) {
       deletePhotoAssets(assetIds).catch(err => {
@@ -587,14 +629,6 @@ export function useAppStore() {
       'Exhibition Hall Guide Key'
     ];
 
-    // Fixtures for testing photo readiness:
-    // 0: square SVG (laptop)
-    // 1: portrait 3:4 SVG (access badge / sign)
-    // 2: landscape 16:9 SVG (digital card)
-    // 3: square SVG (tool/equipment)
-    // 4: square SVG (key/room point)
-    // 5: broken URL to verify onError fallback
-    // 6+: undefined to verify no-photo quiet state
     const samplePhotos = [
       'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%231e293b"/><rect x="22" y="24" width="56" height="38" rx="4" fill="%230284c7"/><path d="M14 68 h72 a4 4 0 0 1 4 4 v2 H10 v-2 a4 4 0 0 1 4 -4 z" fill="%2394a3b8"/></svg>',
       'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="75" height="100" viewBox="0 0 75 100"><rect width="75" height="100" fill="%23312e81"/><circle cx="37.5" cy="38" r="18" fill="%23818cf8"/><path d="M15 88 C15 65 60 65 60 88 Z" fill="%23818cf8"/></svg>',
@@ -607,11 +641,10 @@ export function useAppStore() {
     for (let i = 0; i < count; i++) {
       const hexUid = Array.from({ length: 7 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join(':');
       const timeOffset = (count - i) * 60000;
-      const scenario = i % 4; // 0, 1 = Multi-record (50%), 2 = Single record (25%), 3 = Empty/ID-Only (25%)
+      const scenario = i % 4;
       const photoUrl = i < samplePhotos.length ? samplePhotos[i] : undefined;
 
       if (scenario === 0 || scenario === 1) {
-        // Multi-Record Sample Tag
         const tpl = multiRecordTemplates[i % multiRecordTemplates.length];
         const recs = tpl.records(i);
         const name = i === 0 
@@ -633,7 +666,6 @@ export function useAppStore() {
           photoUrl
         });
       } else if (scenario === 2) {
-        // Single Record Sample Tag
         const isUrl = i % 2 === 0;
         generated.push({
           uid: hexUid,
@@ -662,7 +694,6 @@ export function useAppStore() {
           photoUrl
         });
       } else {
-        // Empty / Unformatted ID-Only Tag
         generated.push({
           uid: hexUid,
           name: `Raw ID Tag ${i + 1}`,
@@ -794,6 +825,7 @@ export function useAppStore() {
 
   return {
     tags,
+    isHydrated,
     upsertTag,
     updateTagName,
     updateTagNotes,

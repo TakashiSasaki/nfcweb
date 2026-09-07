@@ -556,7 +556,17 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-5 space-y-2.5 sm:space-y-3.5 will-change-scroll"
       >
-        {filteredTags.length === 0 ? (
+        {store.isHydrated === false ? (
+          <div className="flex flex-col items-center justify-center h-full text-slate-400 py-16 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mb-3">
+              <Loader2 className="w-7 h-7 text-cyan-400 animate-spin" />
+            </div>
+            <p className="text-sm font-semibold text-slate-200">Loading local tag registry...</p>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm leading-relaxed">
+              Hydrating NFC tag inventory and photo assets from local IndexedDB storage.
+            </p>
+          </div>
+        ) : filteredTags.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-500 py-16 text-center">
             <div className="w-14 h-14 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mb-3">
               <Radio className="w-7 h-7 text-slate-500 opacity-60" />

@@ -231,9 +231,16 @@ export function DebugView({ store }: DebugViewProps) {
           </div>
 
           <div className="flex items-center justify-between p-2.5 bg-slate-900/70 rounded-xl border border-slate-800 text-xs">
-            <span className="text-slate-400">LocalStorage Footprint</span>
+            <span className="text-slate-400">Storage Architecture</span>
+            <span className="font-mono font-bold text-cyan-300">
+              Unified IndexedDB (nfcweb_db)
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between p-2.5 bg-slate-900/70 rounded-xl border border-slate-800 text-xs">
+            <span className="text-slate-400">Attached Photos</span>
             <span className="font-mono font-bold text-slate-200">
-              {(storageUsageBytes / 1024).toFixed(1)} KB
+              {tags.filter((t: any) => t.photoAssetId || t.photoUrl).length} tags with photos
             </span>
           </div>
 
