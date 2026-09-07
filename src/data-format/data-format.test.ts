@@ -506,6 +506,89 @@ describe('ImportPlan (Merge & Replace)', () => {
     expect(plan.updateCount).toBe(0);
     expect(plan.actions.find(a => a.uid === '04111111')?.status).toBe('unchanged');
   });
+
+  it('merge import preserves local photoAssetId and photoUrl for existing tags', () => {
+    const localTags: NFCTagItem[] = [
+      {
+        uid: '04112233445566',
+        name: 'Local Tag with Photo',
+        firstSeen: 1000,
+        lastRead: 2000,
+        readCount: 1,
+        hasNdef: false,
+        records: [],
+        photoAssetId: 'photo-local-12345',
+        photoUrl: 'https://example.com/local.jpg'
+      },
+      {
+        uid: '04998877665544',
+        name: 'Untouched Local Tag',
+        firstSeen: 1000,
+        lastRead: 1500,
+        readCount: 1,
+        hasNdef: false,
+        records: [],
+        photoAssetId: 'photo-untouched-67890'
+      }
+    ];
+
+    const incomingDoc: TagRegistryExportDocumentV1 = {
+      format: CANONICAL_FORMAT,
+      schemaVersion: CANONICAL_SCHEMA_VERSION,
+      exportedAt: '2026-03-30T12:00:00.000Z',
+      appVersion: '1.0.61',
+      tags: [
+        {
+          uid: '04112233445566',
+          name: 'Updated Name From Import',
+          firstSeen: 1000,
+          lastRead: 3000,
+          readCount: 2,
+          hasNdef: false,
+          records: []
+        }
+      ]
+    };
+
+    const plan = buildImportPlan(incomingDoc, localTags, 'merge');
+    expect(plan.resultingTags.length).toBe(2);
+
+    const updated = plan.resultingTags.find(t => t.uid === '04112233445566');
+    expect(updated?.name).toBe('Updated Name From Import');
+    expect(updated?.photoAssetId).toBe('photo-local-12345');
+    expect(updated?.photoUrl).toBe('https://example.com/local.jpg');
+
+    const untouched = plan.resultingTags.find(t => t.uid === '04998877665544');
+    expect(untouched?.photoAssetId).toBe('photo-untouched-67890');
+  });
+
+  it('canonical export excludes photoAssetId and validates schema cleanly', () => {
+    const localTagsWithPhotos: NFCTagItem[] = [
+      {
+        uid: '04112233445566',
+        name: 'Tag with local photo',
+        firstSeen: 1700000000000,
+        lastRead: 1700001000000,
+        readCount: 5,
+        hasNdef: true,
+        tagType: 'NTAG215',
+        records: [{ id: '1', recordType: 'text', data: 'hello', lang: 'en' }],
+        photoAssetId: 'photo-secret-local-id',
+        photoUrl: 'blob:http://localhost:3000/some-blob'
+      }
+    ];
+
+    const exportDoc = buildTagRegistryExportV1(localTagsWithPhotos, '1.0.61');
+    const jsonStr = serializeExportDocument(exportDoc);
+    const parsed = JSON.parse(jsonStr);
+
+    expect(jsonStr).not.toContain('photoAssetId');
+    expect(jsonStr).not.toContain('photo-secret-local-id');
+    expect(parsed.tags[0].photoAssetId).toBeUndefined();
+
+    const validation = validateCanonicalExportDocument(exportDoc);
+    expect(validation.isValid).toBe(true);
+  });
 });
 
 describe('Storage Abstraction: tagRegistryStorage & Quota Regression', () => {

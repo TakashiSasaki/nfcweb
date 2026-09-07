@@ -205,9 +205,14 @@ export function ImportModal({
         {/* Physical NFC Safety Notice */}
         <div className="p-3 bg-blue-950/40 border border-blue-500/30 rounded-2xl flex items-start gap-2.5 text-xs">
           <Info className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
-          <div className="leading-relaxed text-slate-300">
-            <span className="font-bold text-cyan-300">Safety Notice: </span>
-            Importing modifies only the browser's local tag registry. It never performs wireless transmission or writing to physical NFC hardware tags.
+          <div className="leading-relaxed text-slate-300 space-y-1">
+            <div>
+              <span className="font-bold text-cyan-300">Safety Notice: </span>
+              Importing modifies only the browser's local tag registry. It never performs wireless transmission or writing to physical NFC hardware tags.
+            </div>
+            <div className="text-slate-400">
+              Canonical v1 imports tag metadata only and do not import item photos.
+            </div>
           </div>
         </div>
 

@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
+import 'fake-indexeddb/auto';
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { TagCardItem, TagCardItemProps } from './TagCardItem';
 import { NFCTagItem } from './types';
+import { savePhotoAsset, _resetDBForTesting } from './storage/photoAssetStorage';
 
 describe('TagCardItem Component Rendering & Interaction Tests', () => {
   const baseTag: NFCTagItem = {
@@ -35,8 +37,15 @@ describe('TagCardItem Component Rendering & Interaction Tests', () => {
     onShowInfo: vi.fn(),
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await _resetDBForTesting();
+    const mockCreate = vi.fn((blob: Blob) => `blob:mock/${Date.now()}`);
+    const mockRevoke = vi.fn();
+    window.URL.createObjectURL = mockCreate;
+    window.URL.revokeObjectURL = mockRevoke;
+    globalThis.URL.createObjectURL = mockCreate;
+    globalThis.URL.revokeObjectURL = mockRevoke;
   });
 
   afterEach(() => {
@@ -246,7 +255,29 @@ describe('TagCardItem Component Rendering & Interaction Tests', () => {
       expect(removeBtn).not.toBeNull();
 
       fireEvent.click(removeBtn);
-      expect(onUpdatePhoto).toHaveBeenCalledWith(baseTag.uid, undefined, undefined);
+      expect(onUpdatePhoto).toHaveBeenCalledWith(baseTag.uid, { photoAssetId: null, photoUrl: null });
+    });
+
+    it('loads and renders photo asset from IndexedDB when photoAssetId is provided', async () => {
+      const assetId = 'photo-test-rendering';
+      const blob = new Blob(['image-bytes'], { type: 'image/png' });
+      await savePhotoAsset(blob, {
+        id: assetId,
+        mimeType: 'image/png'
+      });
+
+      render(
+        <TagCardItem
+          {...defaultProps}
+          tag={{ ...baseTag, photoAssetId: assetId }}
+        />
+      );
+
+      await waitFor(() => {
+        const img = screen.getByTestId('tag-photo-img') as HTMLImageElement;
+        expect(img).not.toBeNull();
+        expect(img.src).toContain('blob:');
+      });
     });
   });
 });

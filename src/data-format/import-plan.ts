@@ -161,7 +161,17 @@ export function buildImportPlan(
 
     for (const imp of importedDoc.tags) {
       const canonUid = canonicalizeUid(imp.uid);
-      mergedList.push(convertExportableToLocal(imp));
+      const localTag = localMap.get(canonUid);
+      const converted = convertExportableToLocal(imp);
+      if (localTag) {
+        if (localTag.photoAssetId) {
+          converted.photoAssetId = localTag.photoAssetId;
+        }
+        if (localTag.photoUrl) {
+          converted.photoUrl = localTag.photoUrl;
+        }
+      }
+      mergedList.push(converted);
       handledUids.add(canonUid);
     }
 

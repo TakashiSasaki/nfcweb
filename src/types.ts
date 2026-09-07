@@ -77,3 +77,14 @@ export interface NFCTagItem {
 export interface NFCSettings {
   vibrateOnScan?: boolean;
 }
+
+/**
+ * Explicit photo update instruction.
+ * - omitted / undefined: leave field unchanged
+ * - null: explicitly clear field
+ * - string: set new value
+ */
+export interface PhotoUpdate {
+  photoAssetId?: string | null;
+  photoUrl?: string | null;
+}

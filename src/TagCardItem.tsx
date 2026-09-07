@@ -25,7 +25,7 @@ import {
   Loader2,
   X
 } from 'lucide-react';
-import { NFCTagItem } from './types';
+import { NFCTagItem, PhotoUpdate } from './types';
 import { analyzeNTAGCapacity } from './store';
 import { renderControlCharContent, ControlCharViewer, analyzeControlChars } from './ControlCharViewer';
 import { getPhotoAssetBlob, normalizeAndStorePhoto } from './storage/photoAssetStorage';
@@ -45,7 +45,7 @@ export interface TagCardItemProps {
   onOpenSafeErase: (tag: NFCTagItem) => void;
   onDeleteTag: (uid: string) => void;
   onShowInfo: (title: string, message: string) => void;
-  onUpdatePhoto?: (uid: string, photoAssetId?: string, photoUrl?: string) => Promise<void> | void;
+  onUpdatePhoto?: (uid: string, update: PhotoUpdate) => Promise<{ success: boolean; error?: string } | void> | void;
   /** Optional thumbnail override for future photo support */
   thumbnailUrl?: string;
 }
@@ -180,7 +180,10 @@ export function TagCardItem({
       const assetId = await normalizeAndStorePhoto(file, { maxDimension: 1280, quality: 0.85 });
       
       if (onUpdatePhoto) {
-        await onUpdatePhoto(tag.uid, assetId);
+        const res = await onUpdatePhoto(tag.uid, { photoAssetId: assetId, photoUrl: null });
+        if (res && 'success' in res && !res.success) {
+          throw new Error(res.error || 'Failed to save photo to registry');
+        }
       }
       onShowInfo('Photo Saved', `Stored local photo for tag [${tag.uid}].`);
     } catch (err: any) {
@@ -193,11 +196,20 @@ export function TagCardItem({
 
   const handleRemovePhoto = async (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (onUpdatePhoto) {
-      await onUpdatePhoto(tag.uid, undefined, undefined);
+    try {
+      if (onUpdatePhoto) {
+        const res = await onUpdatePhoto(tag.uid, { photoAssetId: null, photoUrl: null });
+        if (res && 'success' in res && !res.success) {
+          onShowInfo('Photo Error', res.error || 'Failed to remove photo.');
+          return;
+        }
+      }
+      setLocalPhotoUrl(null);
+      setIsPreviewOpen(false);
+      onShowInfo('Photo Removed', `Removed photo for tag [${tag.uid}].`);
+    } catch (err: any) {
+      onShowInfo('Photo Error', err?.message || 'Failed to remove photo.');
     }
-    setLocalPhotoUrl(null);
-    onShowInfo('Photo Removed', `Removed photo for tag [${tag.uid}].`);
   };
 
   // Primary record for quick common-case glance

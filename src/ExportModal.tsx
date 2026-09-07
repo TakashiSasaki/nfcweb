@@ -133,6 +133,9 @@ export function ExportModal({
           <p className="text-[11px] text-slate-300 leading-relaxed">
             Strictly validated against JSON Schema (Draft 2020-12). Ephemeral diagnostic logs and hardware settings are omitted to produce a portable tag registry file.
           </p>
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            Item photos are stored locally and are not included in Canonical v1 JSON exports.
+          </p>
 
           <div className="pt-1 flex items-center justify-between text-[11px]">
             <span className="text-slate-400 font-mono">

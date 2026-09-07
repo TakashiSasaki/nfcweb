@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { NFCLog, NFCSettings, NFCTagItem, EditableNDEFRecord } from './types';
+import { NFCLog, NFCSettings, NFCTagItem, EditableNDEFRecord, PhotoUpdate } from './types';
 import { normalizeUid, canonicalizeUid, isValidCanonicalUid } from './domain/uid';
 import { loadTagRegistry, saveTagRegistry, clearTagRegistry, commitTagRegistry } from './storage/tagRegistryStorage';
 import { deletePhotoAsset, deletePhotoAssets } from './storage/photoAssetStorage';
@@ -425,61 +425,123 @@ export function useAppStore() {
     setTags(prev => prev.map(t => canonicalizeUid(t.uid) === canon ? { ...t, notes } : t));
   }, []);
 
-  const updateTagPhoto = useCallback(async (uid: string, photoAssetId?: string, photoUrl?: string) => {
+  const updateTagPhoto = useCallback(async (
+    uid: string,
+    update: PhotoUpdate
+  ): Promise<{ success: boolean; error?: string }> => {
     const canon = canonicalizeUid(uid);
-    let oldAssetIdToDelete: string | undefined;
+    if (!canon) {
+      return { success: false, error: 'Invalid tag UID' };
+    }
 
-    setTags(prev => prev.map(t => {
+    const currentTag = tags.find(t => canonicalizeUid(t.uid) === canon);
+    if (!currentTag) {
+      if (update.photoAssetId) {
+        await deletePhotoAsset(update.photoAssetId).catch(() => {});
+      }
+      return { success: false, error: `Tag with UID [${uid}] not found` };
+    }
+
+    const oldAssetId = currentTag.photoAssetId;
+    const newAssetId = update.photoAssetId;
+
+    // Construct candidate registry with explicit photo updates
+    const candidateTags = tags.map(t => {
       if (canonicalizeUid(t.uid) === canon) {
-        if (t.photoAssetId && t.photoAssetId !== photoAssetId) {
-          oldAssetIdToDelete = t.photoAssetId;
+        const next: NFCTagItem = { ...t };
+        if (update.photoAssetId !== undefined) {
+          if (update.photoAssetId === null) {
+            delete next.photoAssetId;
+          } else {
+            next.photoAssetId = update.photoAssetId;
+          }
         }
-        return {
-          ...t,
-          photoAssetId: photoAssetId || undefined,
-          photoUrl: photoUrl !== undefined ? photoUrl : t.photoUrl
-        };
+        if (update.photoUrl !== undefined) {
+          if (update.photoUrl === null) {
+            delete next.photoUrl;
+          } else {
+            next.photoUrl = update.photoUrl;
+          }
+        }
+        return next;
       }
       return t;
-    }));
+    });
 
-    if (oldAssetIdToDelete) {
-      await deletePhotoAsset(oldAssetIdToDelete).catch(err => {
-        console.warn('Failed to clean up old photo asset:', err);
+    // Explicit persistence boundary: commit to storage FIRST
+    const commitResult = commitTagRegistry(candidateTags, (persisted) => {
+      setTags(persisted);
+    });
+
+    if (!commitResult.success) {
+      // Rollback newly uploaded asset if metadata persistence failed
+      if (newAssetId && newAssetId !== oldAssetId) {
+        await deletePhotoAsset(newAssetId).catch(() => {});
+      }
+      return { success: false, error: commitResult.error || 'Failed to persist tag photo metadata' };
+    }
+
+    // Registry persistence succeeded: clean up previous asset if replaced or removed
+    if (oldAssetId && oldAssetId !== newAssetId) {
+      deletePhotoAsset(oldAssetId).catch(err => {
+        console.warn('Failed to clean up old photo asset from IndexedDB:', err);
       });
     }
-  }, []);
+
+    return { success: true };
+  }, [tags]);
 
   const deleteTag = useCallback((uid: string) => {
     const canon = canonicalizeUid(uid);
-    setTags(prev => {
-      const target = prev.find(t => canonicalizeUid(t.uid) === canon);
-      if (target?.photoAssetId) {
-        deletePhotoAsset(target.photoAssetId).catch(err => {
-          console.warn('Failed to clean up deleted tag photo asset:', err);
-        });
-      }
-      return prev.filter(t => canonicalizeUid(t.uid) !== canon);
+    if (!canon) return;
+
+    const target = tags.find(t => canonicalizeUid(t.uid) === canon);
+    const candidateTags = tags.filter(t => canonicalizeUid(t.uid) !== canon);
+
+    const commitResult = commitTagRegistry(candidateTags, (persisted) => {
+      setTags(persisted);
     });
-  }, []);
+
+    if (commitResult.success && target?.photoAssetId) {
+      deletePhotoAsset(target.photoAssetId).catch(err => {
+        console.warn('Failed to clean up deleted tag photo asset:', err);
+      });
+    }
+  }, [tags]);
 
   const clearAllTags = useCallback(() => {
-    // Delete all associated photo assets from IndexedDB
     const assetIds = tags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id));
+    clearTagRegistry();
+    setTags([]);
+
     if (assetIds.length > 0) {
       deletePhotoAssets(assetIds).catch(err => {
         console.warn('Failed to clean up photo assets on clearAllTags:', err);
       });
     }
-    clearTagRegistry();
-    setTags([]);
   }, [tags]);
 
   const importTagsRegistry = useCallback((newTags: NFCTagItem[]): { success: boolean; error?: string } => {
-    return commitTagRegistry(newTags, (persistedTags) => {
+    const previousAssetIds = new Set<string>(
+      tags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id))
+    );
+    const newAssetIds = new Set<string>(
+      newTags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id))
+    );
+    const unreferencedAssetIds: string[] = Array.from(previousAssetIds).filter((id: string) => !newAssetIds.has(id));
+
+    const result = commitTagRegistry(newTags, (persistedTags) => {
       setTags(persistedTags);
     });
-  }, []);
+
+    if (result.success && unreferencedAssetIds.length > 0) {
+      deletePhotoAssets(unreferencedAssetIds).catch(err => {
+        console.warn('Failed to clean up unreferenced photo assets after import:', err);
+      });
+    }
+
+    return result;
+  }, [tags]);
 
   const isLegacyOrTaggedSample = (t: NFCTagItem) => {
     if (t.isSample) return true;
@@ -497,17 +559,20 @@ export function useAppStore() {
   };
 
   const clearSampleTags = useCallback(() => {
-    setTags(prev => {
-      const sampleTags = prev.filter(isLegacyOrTaggedSample);
-      const sampleAssetIds = sampleTags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id));
-      if (sampleAssetIds.length > 0) {
-        deletePhotoAssets(sampleAssetIds).catch(err => {
-          console.warn('Failed to clean up sample photo assets:', err);
-        });
-      }
-      return prev.filter(t => !isLegacyOrTaggedSample(t));
+    const sampleTags = tags.filter(isLegacyOrTaggedSample);
+    const sampleAssetIds = sampleTags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id));
+    const candidateTags = tags.filter(t => !isLegacyOrTaggedSample(t));
+
+    const result = commitTagRegistry(candidateTags, (persistedTags) => {
+      setTags(persistedTags);
     });
-  }, []);
+
+    if (result.success && sampleAssetIds.length > 0) {
+      deletePhotoAssets(sampleAssetIds).catch(err => {
+        console.warn('Failed to clean up sample photo assets:', err);
+      });
+    }
+  }, [tags]);
 
   // Developer utility to seed mock tags for stress-testing and multi-record validation
   const seedMockTags = useCallback((count: number = 50) => {
