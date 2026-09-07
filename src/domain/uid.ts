@@ -34,13 +34,12 @@ export const normalizeUid = canonicalizeUid;
 /**
  * Validates whether a given string is in strict canonical UID format:
  * - Lowercase hexadecimal characters only (0-9, a-f)
- * - Between 8 and 32 characters (4 to 16 bytes)
- * - Even number of hexadecimal digits
+ * - Between 8 and 32 characters (4 to 16 bytes, even number of digits)
+ * - Derived strictly from the Canonical JSON Schema SSOT regex
  */
 export function isValidCanonicalUid(uid: string): boolean {
   if (typeof uid !== 'string') return false;
-  if (!CANONICAL_UID_REGEX.test(uid)) return false;
-  return uid.length % 2 === 0;
+  return CANONICAL_UID_REGEX.test(uid);
 }
 
 /**

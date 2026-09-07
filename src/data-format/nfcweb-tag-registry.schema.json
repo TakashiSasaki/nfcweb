@@ -58,7 +58,7 @@
       "properties": {
         "uid": {
           "type": "string",
-          "pattern": "^[0-9a-f]{8,32}$",
+          "pattern": "^(?:[0-9a-f]{2}){4,16}$",
           "description": "Canonical lowercase hexadecimal UID representation without separators (e.g. 045ab23c9d8001).",
           "examples": [
             "045ab23c9d8001",

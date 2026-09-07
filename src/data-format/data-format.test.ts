@@ -77,6 +77,10 @@ describe('Domain: Canonical UID & SSOT Alignment', () => {
     expect(isValidCanonicalUid('045AB23C')).toBe(false); // Uppercase
     expect(isValidCanonicalUid('123')).toBe(false); // Odd length / too short
     expect(isValidCanonicalUid('123456')).toBe(false); // 6 chars (< 8)
+    expect(isValidCanonicalUid('123456789')).toBe(false); // 9 chars (odd length in range 8-32)
+    expect(isValidCanonicalUid('123456789ab')).toBe(false); // 11 chars (odd length in range 8-32)
+    expect(isValidCanonicalUid('0123456789abc')).toBe(false); // 13 chars (odd length in range 8-32)
+    expect(isValidCanonicalUid('0123456789abcdef0123456789abcdef0')).toBe(false); // 33 chars (> 32, odd)
     expect(isValidCanonicalUid('0123456789abcdef0123456789abcdef00')).toBe(false); // 34 chars (> 32)
     expect(isValidCanonicalUid('')).toBe(false); // Empty
     expect(isValidCanonicalUid('xyz12345')).toBe(false); // Non-hex
@@ -97,18 +101,34 @@ describe('Domain: Canonical UID & SSOT Alignment', () => {
 
   it('ensures Schema UID pattern and Domain UID regex behavior match across test vectors', () => {
     const testCases = [
-      { uid: '045ab23c', valid: true },
-      { uid: '045ab23c9d8001', valid: true },
-      { uid: '0123456789abcdef0123456789abcdef', valid: true },
-      { uid: '04:5a:b2:3c', valid: false },
-      { uid: '045AB23C', valid: false },
-      { uid: '123456', valid: false },
-      { uid: '1234567', valid: false },
-      { uid: '0123456789abcdef0123456789abcdef00', valid: false },
-      { uid: 'gggggggg', valid: false }
+      // Valid boundaries
+      { uid: '04a1b2c3', valid: true }, // 8 chars (4 bytes)
+      { uid: '045ab23c', valid: true }, // 8 chars
+      { uid: '045ab23c9d8001', valid: true }, // 14 chars (7 bytes)
+      { uid: '0123456789abcdef0123456789abcdef', valid: true }, // 32 chars (16 bytes)
+
+      // Odd-length inside allowed 8-32 range (rejected by both schema and domain)
+      { uid: '123456789', valid: false }, // 9 chars
+      { uid: '123456789ab', valid: false }, // 11 chars
+      { uid: '0123456789abc', valid: false }, // 13 chars
+      { uid: '0123456789abcdef0123456789abcde', valid: false }, // 31 chars
+
+      // Invalid boundaries (< 8 chars, > 32 chars)
+      { uid: '123456', valid: false }, // 6 chars (< 8)
+      { uid: '1234567', valid: false }, // 7 chars (< 8)
+      { uid: '0123456789abcdef0123456789abcdef0', valid: false }, // 33 chars (> 32, odd)
+      { uid: '0123456789abcdef0123456789abcdef00', valid: false }, // 34 chars (> 32, even)
+
+      // Formatting & non-hex
+      { uid: '04:5a:b2:3c', valid: false }, // Separators (colons)
+      { uid: '04-5a-b2-3c', valid: false }, // Separators (hyphens)
+      { uid: '045AB23C', valid: false }, // Uppercase
+      { uid: 'gggggggg', valid: false }, // Non-hex
+      { uid: 'xyz12345', valid: false }, // Non-hex
+      { uid: '', valid: false } // Empty
     ];
 
-    const schemaRegex = new RegExp(`^${registrySchema.$defs.ExportableTagV1.properties.uid.pattern}$`);
+    const schemaRegex = new RegExp(registrySchema.$defs.ExportableTagV1.properties.uid.pattern);
     for (const { uid, valid } of testCases) {
       expect(isValidCanonicalUid(uid)).toBe(valid);
       expect(schemaRegex.test(uid)).toBe(valid);
@@ -195,6 +215,21 @@ describe('Decisive Rejection of Non-Canonical & Legacy Formats', () => {
     expect(res.errors?.[0].message).toContain('pattern');
   });
 
+  it('rejects odd-length in-range UIDs (e.g. 9 hex chars) by strict schema pattern', () => {
+    const oddUidDoc = {
+      ...EXAMPLE_TAG_REGISTRY_V1,
+      tags: [
+        {
+          ...EXAMPLE_TAG_REGISTRY_V1.tags[0],
+          uid: '123456789'
+        }
+      ]
+    };
+    const res = validateImportPayload(oddUidDoc);
+    expect(res.ok).toBe(false);
+    expect(res.errors?.[0].message).toContain('pattern');
+  });
+
   it('rejects duplicate UIDs in the same document', () => {
     const dupDoc = {
       ...EXAMPLE_TAG_REGISTRY_V1,
@@ -250,6 +285,31 @@ describe('Export & Codec Invariant Enforcement (No Silent Repair)', () => {
     expect(doc.tags[0].uid).toBe('04112233445566');
     expect(doc.tags[0].records.length).toBe(4);
     expect((doc.tags[0] as any).isSample).toBeUndefined();
+  });
+
+  it('builds, validates, serializes, and deserializes an empty registry (0 tags)', () => {
+    const doc = buildTagRegistryExportV1([], '1.0.53', new Date('2026-09-07T12:00:00.000Z'));
+    expect(doc.format).toBe(CANONICAL_FORMAT);
+    expect(doc.schemaVersion).toBe(1);
+    expect(doc.appVersion).toBe('1.0.53');
+    expect(doc.exportedAt).toBe('2026-09-07T12:00:00.000Z');
+    expect(doc.tags).toEqual([]);
+
+    const schemaRes = validateCanonicalExportDocument(doc);
+    expect(schemaRes.isValid).toBe(true);
+    expect(schemaRes.errors).toEqual([]);
+
+    const payloadRes = validateImportPayload(doc);
+    expect(payloadRes.ok).toBe(true);
+    expect(payloadRes.document.tags).toEqual([]);
+
+    const jsonStr = serializeExportDocument(doc);
+    expect(jsonStr).toContain('"tags": []');
+
+    const roundTrip = deserializeExportDocument(jsonStr);
+    expect(roundTrip.tags).toEqual([]);
+    expect(roundTrip.format).toBe(CANONICAL_FORMAT);
+    expect(roundTrip.schemaVersion).toBe(CANONICAL_SCHEMA_VERSION);
   });
 
   it('serializes and deserializes cleanly', () => {

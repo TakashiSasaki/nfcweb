@@ -54,7 +54,7 @@ export function ExportModal({
   const physicalCount = totalTagsCount - sampleCount;
 
   const handleCopyClipboard = async () => {
-    if (!serializedJson) return;
+    if (!serializedJson || exportError) return;
     try {
       await navigator.clipboard.writeText(serializedJson);
       setCopied(true);
@@ -66,7 +66,7 @@ export function ExportModal({
   };
 
   const handleDownload = () => {
-    if (!serializedJson) return;
+    if (!serializedJson || exportError) return;
     try {
       const filename = generateExportFilename();
       downloadJsonFile(filename, serializedJson);
@@ -186,8 +186,8 @@ export function ExportModal({
           <button
             type="button"
             onClick={handleCopyClipboard}
-            disabled={totalTagsCount === 0 || !serializedJson}
-            className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 text-slate-200 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
+            disabled={!serializedJson || !!exportError}
+            className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 disabled:cursor-not-allowed text-slate-200 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
           >
             {copied ? (
               <>
@@ -205,8 +205,8 @@ export function ExportModal({
           <button
             type="button"
             onClick={handleDownload}
-            disabled={totalTagsCount === 0 || !serializedJson}
-            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-900/30"
+            disabled={!serializedJson || !!exportError}
+            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-40 disabled:hover:bg-emerald-600 disabled:cursor-not-allowed text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-900/30"
           >
             <Download className="w-4 h-4" />
             <span>JSONダウンロード (.json)</span>
