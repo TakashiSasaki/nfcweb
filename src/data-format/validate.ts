@@ -1,11 +1,13 @@
 // Runtime schema and semantic validation for Canonical v1 Tag Registry
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
-import registrySchema from './nfcweb-tag-registry.schema.json';
+import ndefRecordSchema from './schemas/ndef-record.schema.json';
+import nfcTagSchema from './schemas/nfc-tag.schema.json';
+import nfcTagRegistrySchema from './schemas/nfc-tag-registry.schema.json';
 import {
   CANONICAL_FORMAT,
   CANONICAL_SCHEMA_VERSION,
-  NfcwebTagRegistryExportV1,
+  NfcTagRegistryV1,
   ImportValidationResult,
   ImportValidationError
 } from './types';
@@ -14,7 +16,7 @@ import { isValidCanonicalUid, canonicalizeUid } from '../domain/uid';
 // Initialize Ajv 2020 validator instance
 // @ts-ignore - Handle ESM/CJS interop for Ajv2020 constructor
 const AjvClass = (Ajv2020 as any).default || Ajv2020;
-const ajv = new AjvClass({
+export const ajv = new AjvClass({
   allErrors: true,
   verbose: true,
   strict: false
@@ -24,9 +26,20 @@ const ajv = new AjvClass({
 const addFormatsFn = (addFormats as any).default || addFormats;
 addFormatsFn(ajv);
 
-const validateSchema = (ajv as any).compile(registrySchema);
+// Register canonical schema resources locally (offline, no network dependency)
+ajv.addSchema(ndefRecordSchema);
+ajv.addSchema(nfcTagSchema);
+ajv.addSchema(nfcTagRegistrySchema);
 
-export { registrySchema };
+export const validateNdefRecord = ajv.getSchema('https://nfcweb.ai.studio/schemas/ndef-record/v1')!;
+export const validateNfcTag = ajv.getSchema('https://nfcweb.ai.studio/schemas/nfc-tag/v1')!;
+export const validateNfcTagRegistry = ajv.getSchema('https://nfcweb.ai.studio/schemas/nfc-tag-registry/v1')!;
+
+// Legacy/compatibility export
+export const registrySchema = nfcTagRegistrySchema;
+export { ndefRecordSchema, nfcTagSchema, nfcTagRegistrySchema };
+
+const validateSchema = validateNfcTagRegistry;
 
 /**
  * Convenience wrapper returning boolean isValid and string error array.
@@ -35,7 +48,7 @@ export function validateCanonicalExportDocument(doc: unknown): { isValid: boolea
   const res = validateImportPayload(doc);
   return {
     isValid: res.ok,
-    errors: res.errors?.map(e => `${e.path}: ${e.message}`) || []
+    errors: res.errors?.map((e) => `${e.path}: ${e.message}`) || []
   };
 }
 
@@ -54,12 +67,14 @@ export function validateImportPayload(input: unknown): ImportValidationResult {
   if (typeof input !== 'object' || Array.isArray(input)) {
     return {
       ok: false,
-      errors: [{
-        path: '#',
-        message: Array.isArray(input)
-          ? 'Legacy plain tag array is not supported. Please provide a canonical { format, schemaVersion, tags, ... } object.'
-          : 'Import data must be a valid JSON object.'
-      }]
+      errors: [
+        {
+          path: '#',
+          message: Array.isArray(input)
+            ? 'Legacy plain tag array is not supported. Please provide a canonical { format, schemaVersion, tags, ... } object.'
+            : 'Import data must be a valid JSON object.'
+        }
+      ]
     };
   }
 
@@ -91,27 +106,31 @@ export function validateImportPayload(input: unknown): ImportValidationResult {
   if (typeof recordObj.schemaVersion === 'number' && recordObj.schemaVersion > CANONICAL_SCHEMA_VERSION) {
     return {
       ok: false,
-      errors: [{
-        path: '/schemaVersion',
-        message: `Unsupported future schema version (${recordObj.schemaVersion}). This version of NFCWeb only supports schema v${CANONICAL_SCHEMA_VERSION}. Please update the application.`
-      }]
+      errors: [
+        {
+          path: '/schemaVersion',
+          message: `Unsupported future schema version (${recordObj.schemaVersion}). This version of NFCWeb only supports schema v${CANONICAL_SCHEMA_VERSION}. Please update the application.`
+        }
+      ]
     };
   }
 
   if (recordObj.schemaVersion !== CANONICAL_SCHEMA_VERSION) {
     return {
       ok: false,
-      errors: [{
-        path: '/schemaVersion',
-        message: `Invalid schema version (${String(recordObj.schemaVersion)}). Expected v${CANONICAL_SCHEMA_VERSION}.`
-      }]
+      errors: [
+        {
+          path: '/schemaVersion',
+          message: `Invalid schema version (${String(recordObj.schemaVersion)}). Expected v${CANONICAL_SCHEMA_VERSION}.`
+        }
+      ]
     };
   }
 
   // 1. Structural validation via compiled authoritative JSON Schema
   const isSchemaValid = validateSchema(input);
   if (!isSchemaValid && validateSchema.errors) {
-    const errors: ImportValidationError[] = validateSchema.errors.map(err => {
+    const errors: ImportValidationError[] = validateSchema.errors.map((err: any) => {
       const path = err.instancePath || (err.params as any)?.missingProperty
         ? `${err.instancePath || ''}/${(err.params as any)?.missingProperty || ''}`.replace(/\/+/g, '/')
         : '#';
@@ -124,7 +143,7 @@ export function validateImportPayload(input: unknown): ImportValidationResult {
     return { ok: false, errors };
   }
 
-  const validDoc = input as NfcwebTagRegistryExportV1;
+  const validDoc = input as NfcTagRegistryV1;
 
   // 2. Semantic Checks:
   // - Strict canonical UID formatting & even-length byte verification

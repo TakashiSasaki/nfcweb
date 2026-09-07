@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
+import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
 import {
-  registrySchema,
+  nfcTagRegistrySchema,
+  nfcTagSchema,
+  ndefRecordSchema,
+  nfcTagBundle,
+  nfcTagRegistryBundle,
+  validateNdefRecord,
+  validateNfcTag,
+  validateNfcTagRegistry,
   validateImportPayload,
   validateCanonicalExportDocument,
   buildTagRegistryExportV1,
@@ -26,8 +35,8 @@ import { NFCTagItem } from '../types';
 
 describe('Domain: canonical UID and schema alignment', () => {
   it('derives the UID pattern from the canonical schema', () => {
-    expect(CANONICAL_UID_PATTERN).toBe(registrySchema.$defs.ExportableTagV1.properties.uid.pattern);
-    expect(CANONICAL_UID_REGEX.source).toBe(registrySchema.$defs.ExportableTagV1.properties.uid.pattern);
+    expect(CANONICAL_UID_PATTERN).toBe(nfcTagSchema.properties.uid.pattern);
+    expect(CANONICAL_UID_REGEX.source).toBe(nfcTagSchema.properties.uid.pattern);
   });
 
   it('accepts only canonical lowercase even-length hex UIDs', () => {
@@ -46,7 +55,7 @@ describe('Domain: canonical UID and schema alignment', () => {
   });
 
   it('keeps schema and domain validation behavior aligned', () => {
-    const schemaRegex = new RegExp(registrySchema.$defs.ExportableTagV1.properties.uid.pattern);
+    const schemaRegex = new RegExp(nfcTagSchema.properties.uid.pattern);
     for (const uid of ['04a1b2c3', '045ab23c9d8001', '0123456789abcdef0123456789abcdef']) {
       expect(schemaRegex.test(uid)).toBe(true);
       expect(CANONICAL_UID_REGEX.test(uid)).toBe(true);
@@ -58,23 +67,73 @@ describe('Domain: canonical UID and schema alignment', () => {
   });
 });
 
-describe('Canonical JSON schema', () => {
-  it('uses Draft 2020-12 and strict top-level properties', () => {
-    expect(registrySchema.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
-    expect(registrySchema.title).toBe('NFCWeb Tag Registry Interchange Schema');
-    expect(registrySchema.additionalProperties).toBe(false);
+describe('Modular Canonical JSON Schemas', () => {
+  it('defines the three independent schema resources with exact canonical $ids', () => {
+    expect(ndefRecordSchema.$id).toBe('https://nfcweb.ai.studio/schemas/ndef-record/v1');
+    expect(nfcTagSchema.$id).toBe('https://nfcweb.ai.studio/schemas/nfc-tag/v1');
+    expect(nfcTagRegistrySchema.$id).toBe('https://nfcweb.ai.studio/schemas/nfc-tag-registry/v1');
+  });
+
+  it('follows the strict dependency hierarchy: Registry -> Tag -> NDEF', () => {
+    // Registry schema references Tag schema
+    expect(nfcTagRegistrySchema.properties.tags.items.$ref).toBe('https://nfcweb.ai.studio/schemas/nfc-tag/v1');
+    // Tag schema references NDEF schema
+    expect(nfcTagSchema.properties.records.items.$ref).toBe('https://nfcweb.ai.studio/schemas/ndef-record/v1');
+    // Lower schemas are not duplicated inside higher schemas
+    expect((nfcTagRegistrySchema as any).$defs).toBeUndefined();
+    expect((nfcTagSchema as any).$defs).toBeUndefined();
+  });
+
+  it('exposes stable $anchor identifiers for NDEF variants', () => {
+    expect(ndefRecordSchema.$defs.TextRecord.$anchor).toBe('text');
+    expect(ndefRecordSchema.$defs.UrlRecord.$anchor).toBe('url');
+    expect(ndefRecordSchema.$defs.MimeRecord.$anchor).toBe('mime');
+    expect(ndefRecordSchema.$defs.EmptyRecord.$anchor).toBe('empty');
+
+    expect(ndefRecordSchema.oneOf).toEqual([
+      { $ref: '#text' },
+      { $ref: '#url' },
+      { $ref: '#mime' },
+      { $ref: '#empty' }
+    ]);
+  });
+
+  it('validates individual NDEF records via validateNdefRecord', () => {
+    expect(validateNdefRecord({ id: '1', recordType: 'text', data: 'hello' })).toBe(true);
+    expect(validateNdefRecord({ id: '2', recordType: 'url', data: 'https://example.com' })).toBe(true);
+    expect(validateNdefRecord({ id: '3', recordType: 'mime', data: '{}', mediaType: 'application/json' })).toBe(true);
+    expect(validateNdefRecord({ id: '4', recordType: 'empty', data: '' })).toBe(true);
+    expect(validateNdefRecord({ id: '5', recordType: 'unknown' })).toBe(false);
+  });
+
+  it('validates single tag entries via validateNfcTag', () => {
+    const validTag = {
+      uid: '045ab23c9d8001',
+      firstSeen: 1000,
+      lastRead: 2000,
+      readCount: 1,
+      hasNdef: true,
+      records: [{ id: '1', recordType: 'text', data: 'hello' }]
+    };
+    expect(validateNfcTag(validTag)).toBe(true);
+
+    const invalidTag = {
+      ...validTag,
+      records: [{ id: '1', recordType: 'invalid-type', data: 'test' }]
+    };
+    expect(validateNfcTag(invalidTag)).toBe(false);
   });
 
   it('derives canonical constants from the schema SSOT', () => {
-    expect(CANONICAL_FORMAT).toBe(registrySchema.properties.format.const);
-    expect(CANONICAL_SCHEMA_VERSION).toBe(registrySchema.properties.schemaVersion.const);
+    expect(CANONICAL_FORMAT).toBe(nfcTagRegistrySchema.properties.format.const);
+    expect(CANONICAL_SCHEMA_VERSION).toBe(nfcTagRegistrySchema.properties.schemaVersion.const);
   });
 
   it('validates the canonical example', () => {
     expect(validateCanonicalExportDocument(EXAMPLE_TAG_REGISTRY_V1)).toEqual({ isValid: true, errors: [] });
     const result = validateImportPayload(EXAMPLE_TAG_REGISTRY_V1);
     expect(result.ok).toBe(true);
-    expect(result.document.schemaVersion).toBe(CANONICAL_SCHEMA_VERSION);
+    expect(result.document?.schemaVersion).toBe(CANONICAL_SCHEMA_VERSION);
   });
 
   it('rejects legacy arrays and unsupported format versions', () => {
@@ -108,25 +167,81 @@ describe('Canonical JSON schema', () => {
   });
 });
 
+describe('Compound Schema Documents (Bundles)', () => {
+  it('validates tag bundle in a completely fresh Ajv instance without network access', () => {
+    const freshAjv = new Ajv2020({ allErrors: true, strict: false });
+    addFormats(freshAjv);
+    const validate = freshAjv.compile(nfcTagBundle);
+
+    const validTag = {
+      uid: '045ab23c9d8001',
+      firstSeen: 1000,
+      lastRead: 2000,
+      readCount: 1,
+      hasNdef: true,
+      records: [{ id: '1', recordType: 'text', data: 'hello' }]
+    };
+    expect(validate(validTag)).toBe(true);
+
+    const invalidTag = {
+      ...validTag,
+      records: [{ id: '1', recordType: 'bad-record-type' }]
+    };
+    expect(validate(invalidTag)).toBe(false);
+  });
+
+  it('validates registry bundle in a completely fresh Ajv instance without network access', () => {
+    const freshAjv = new Ajv2020({ allErrors: true, strict: false });
+    addFormats(freshAjv);
+    const validate = freshAjv.compile(nfcTagRegistryBundle);
+
+    expect(validate(EXAMPLE_TAG_REGISTRY_V1)).toBe(true);
+
+    const corrupted = {
+      ...EXAMPLE_TAG_REGISTRY_V1,
+      tags: [
+        {
+          uid: '045ab23c9d8001',
+          firstSeen: 1000,
+          lastRead: 2000,
+          readCount: 1,
+          hasNdef: true,
+          records: [{ id: '1', recordType: 'invalid' }]
+        }
+      ]
+    };
+    expect(validate(corrupted)).toBe(false);
+  });
+
+  it('preserves canonical $id and $ref URIs inside bundles without rewriting to local JSON pointers', () => {
+    expect(nfcTagRegistryBundle.properties.tags.items.$ref).toBe('https://nfcweb.ai.studio/schemas/nfc-tag/v1');
+    expect(nfcTagRegistryBundle.$defs['nfc-tag'].properties.records.items.$ref).toBe('https://nfcweb.ai.studio/schemas/ndef-record/v1');
+    expect(nfcTagRegistryBundle.$defs['nfc-tag'].$id).toBe('https://nfcweb.ai.studio/schemas/nfc-tag/v1');
+    expect(nfcTagRegistryBundle.$defs['ndef-record'].$id).toBe('https://nfcweb.ai.studio/schemas/ndef-record/v1');
+  });
+});
+
 describe('Canonical export and codec invariants', () => {
-  const validTags: NFCTagItem[] = [{
-    uid: '04112233445566',
-    name: 'Test Tag',
-    firstSeen: 1788700000000,
-    lastRead: 1788750000000,
-    readCount: 5,
-    lastAction: 'read',
-    tagType: 'NTAG215',
-    hasNdef: true,
-    notes: 'Test note',
-    isSample: true,
-    records: [
-      { id: 'rec-1', recordType: 'url', data: 'https://takashisasaki.github.io' },
-      { id: 'rec-2', recordType: 'text', data: 'Tag message', lang: 'ja', encoding: 'utf-8' },
-      { id: 'rec-3', recordType: 'mime', mediaType: 'application/json', data: '{"status":"ok"}' },
-      { id: 'rec-4', recordType: 'empty', data: '' }
-    ]
-  }];
+  const validTags: NFCTagItem[] = [
+    {
+      uid: '04112233445566',
+      name: 'Test Tag',
+      firstSeen: 1788700000000,
+      lastRead: 1788750000000,
+      readCount: 5,
+      lastAction: 'read',
+      tagType: 'NTAG215',
+      hasNdef: true,
+      notes: 'Test note',
+      isSample: true,
+      records: [
+        { id: 'rec-1', recordType: 'url', data: 'https://takashisasaki.github.io' },
+        { id: 'rec-2', recordType: 'text', data: 'Tag message', lang: 'ja', encoding: 'utf-8' },
+        { id: 'rec-3', recordType: 'mime', mediaType: 'application/json', data: '{"status":"ok"}' },
+        { id: 'rec-4', recordType: 'empty', data: '' }
+      ]
+    }
+  ];
 
   it('builds a valid v1 export and strips local-only sample metadata', () => {
     const doc = buildTagRegistryExportV1(validTags, '1.0.70', new Date('2026-09-07T10:00:00.000Z'));
@@ -190,14 +305,14 @@ describe('ImportPlan merge and replace semantics', () => {
     expect(plan.removedCount).toBe(0);
     const result = applyImportPlan(plan);
     expect(result).toHaveLength(3);
-    expect(result.find(tag => tag.uid === '04111111')?.name).toBe('Existing 1');
-    expect(result.find(tag => tag.uid === '04222222')?.name).toBe('Updated 2');
+    expect(result.find((tag) => tag.uid === '04111111')?.name).toBe('Existing 1');
+    expect(result.find((tag) => tag.uid === '04222222')?.name).toBe('Updated 2');
   });
 
   it('replace retains only imported tags', () => {
     const plan = buildImportPlan(incoming, localTags, 'replace');
     expect(plan.removedCount).toBe(1);
-    expect(applyImportPlan(plan).map(tag => tag.uid).sort()).toEqual(['04222222', '04333333']);
+    expect(applyImportPlan(plan).map((tag) => tag.uid).sort()).toEqual(['04222222', '04333333']);
   });
 
   it('identifies unchanged tags', () => {
@@ -214,17 +329,19 @@ describe('ImportPlan merge and replace semantics', () => {
   });
 
   it('merge preserves local photo fields on matching UID', () => {
-    const local: NFCTagItem[] = [{
-      uid: '04112233445566',
-      name: 'Local',
-      firstSeen: 1000,
-      lastRead: 2000,
-      readCount: 1,
-      hasNdef: false,
-      records: [],
-      photoAssetId: 'photo-local',
-      photoUrl: 'https://example.com/local.jpg'
-    }];
+    const local: NFCTagItem[] = [
+      {
+        uid: '04112233445566',
+        name: 'Local',
+        firstSeen: 1000,
+        lastRead: 2000,
+        readCount: 1,
+        hasNdef: false,
+        records: [],
+        photoAssetId: 'photo-local',
+        photoUrl: 'https://example.com/local.jpg'
+      }
+    ];
     const doc: TagRegistryExportDocumentV1 = {
       format: CANONICAL_FORMAT,
       schemaVersion: CANONICAL_SCHEMA_VERSION,

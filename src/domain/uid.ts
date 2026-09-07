@@ -1,4 +1,4 @@
-import registrySchema from '../data-format/nfcweb-tag-registry.schema.json';
+import nfcTagSchema from '../data-format/schemas/nfc-tag.schema.json';
 
 /**
  * Authoritative domain utilities for NFC Tag Unique Identifiers (UID).
@@ -11,10 +11,10 @@ import registrySchema from '../data-format/nfcweb-tag-registry.schema.json';
  * - length: 8 to 32 hex characters (4 to 16 bytes, even length)
  * 
  * Derived directly from Canonical JSON Schema SSOT:
- * $defs.ExportableTagV1.properties.uid.pattern
+ * nfc-tag.schema.json properties.uid.pattern
  */
 
-export const CANONICAL_UID_PATTERN = registrySchema.$defs.ExportableTagV1.properties.uid.pattern;
+export const CANONICAL_UID_PATTERN = nfcTagSchema.properties.uid.pattern;
 export const CANONICAL_UID_REGEX = new RegExp(CANONICAL_UID_PATTERN);
 
 /**

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nfcweb.ai.studio/schemas/nfc-tag-registry/v1",
+  "title": "NfcTagRegistryV1",
+  "description": "Canonical v1 interchange format for the NFCWeb NFC tag registry backup and migration.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schemaVersion",
+    "exportedAt",
+    "appVersion",
+    "tags"
+  ],
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "nfcweb-tag-registry",
+      "description": "Identifier of the data interchange format."
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Interchange schema specification version. Incremented only for breaking schema changes."
+    },
+    "exportedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of export generation."
+    },
+    "appVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Application release version recorded at export time for provenance."
+    },
+    "tags": {
+      "type": "array",
+      "description": "Collection of NFC tag registry entries.",
+      "items": {
+        "$ref": "https://nfcweb.ai.studio/schemas/nfc-tag/v1"
+      }
+    }
+  }
+}

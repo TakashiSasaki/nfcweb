@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nfcweb.ai.studio/schemas/ndef-record/v1",
+  "title": "NdefRecordV1",
+  "description": "Discriminated union of supported NDEF record types.",
+  "oneOf": [
+    {
+      "$ref": "#text"
+    },
+    {
+      "$ref": "#url"
+    },
+    {
+      "$ref": "#mime"
+    },
+    {
+      "$ref": "#empty"
+    }
+  ],
+  "$defs": {
+    "TextRecord": {
+      "$anchor": "text",
+      "type": "object",
+      "title": "TextRecordV1",
+      "description": "NDEF Well-Known Text record (T).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "recordType",
+        "data"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique identifier for this record."
+        },
+        "recordType": {
+          "type": "string",
+          "const": "text",
+          "description": "Record type discriminator for text."
+        },
+        "data": {
+          "type": "string",
+          "description": "Text payload content."
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code (e.g. ja, en)."
+        },
+        "encoding": {
+          "type": "string",
+          "description": "Text character encoding (e.g. utf-8)."
+        }
+      }
+    },
+    "UrlRecord": {
+      "$anchor": "url",
+      "type": "object",
+      "title": "UrlRecordV1",
+      "description": "NDEF Well-Known URI/URL record (U).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "recordType",
+        "data"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique identifier for this record."
+        },
+        "recordType": {
+          "type": "string",
+          "const": "url",
+          "description": "Record type discriminator for URI/URL."
+        },
+        "data": {
+          "type": "string",
+          "description": "Web URL or URI target string."
+        }
+      }
+    },
+    "MimeRecord": {
+      "$anchor": "mime",
+      "type": "object",
+      "title": "MimeRecordV1",
+      "description": "NDEF MIME media type record.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "recordType",
+        "data",
+        "mediaType"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique identifier for this record."
+        },
+        "recordType": {
+          "type": "string",
+          "const": "mime",
+          "description": "Record type discriminator for MIME content."
+        },
+        "data": {
+          "type": "string",
+          "description": "MIME payload string (e.g. serialized JSON, vCard)."
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1,
+          "description": "IANA MIME media type specification (e.g. application/json, text/vcard)."
+        }
+      }
+    },
+    "EmptyRecord": {
+      "$anchor": "empty",
+      "type": "object",
+      "title": "EmptyRecordV1",
+      "description": "NDEF Empty record.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "recordType"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique identifier for this record."
+        },
+        "recordType": {
+          "type": "string",
+          "const": "empty",
+          "description": "Record type discriminator for empty record."
+        },
+        "data": {
+          "type": "string",
+          "description": "Empty payload string (optional, typically empty string)."
+        }
+      }
+    }
+  }
+}

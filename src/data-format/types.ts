@@ -1,4 +1,11 @@
 import {
+  NfcTagRegistryV1,
+  NfcTagV1,
+  NdefRecordV1,
+  TextRecordV1,
+  UrlRecordV1,
+  MimeRecordV1,
+  EmptyRecordV1,
   NFCWebTagRegistryInterchangeSchema,
   ExportableTagV1,
   NdefRecord,
@@ -8,19 +15,25 @@ import {
   EmptyRecord
 } from './generated/nfcweb-tag-registry';
 import { NFCTagItem } from '../types';
-import registrySchema from './nfcweb-tag-registry.schema.json';
+import nfcTagRegistrySchema from './schemas/nfc-tag-registry.schema.json';
+import nfcTagSchema from './schemas/nfc-tag.schema.json';
 
-// Authoritative contract metadata derived directly from Canonical JSON Schema (Draft 2020-12)
-export const CANONICAL_FORMAT: NFCWebTagRegistryInterchangeSchema['format'] = registrySchema.properties.format.const as NFCWebTagRegistryInterchangeSchema['format'];
-export const CANONICAL_SCHEMA_VERSION: NFCWebTagRegistryInterchangeSchema['schemaVersion'] = registrySchema.properties.schemaVersion.const as NFCWebTagRegistryInterchangeSchema['schemaVersion'];
-export const CANONICAL_UID_PATTERN: string = registrySchema.$defs.ExportableTagV1.properties.uid.pattern;
+// Authoritative contract metadata derived directly from Canonical JSON Schemas (Draft 2020-12)
+export const CANONICAL_FORMAT: NfcTagRegistryV1['format'] = nfcTagRegistrySchema.properties.format.const as NfcTagRegistryV1['format'];
+export const CANONICAL_SCHEMA_VERSION: NfcTagRegistryV1['schemaVersion'] = nfcTagRegistrySchema.properties.schemaVersion.const as NfcTagRegistryV1['schemaVersion'];
+export const CANONICAL_UID_PATTERN: string = nfcTagSchema.properties.uid.pattern;
 export const MAX_IMPORT_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MiB threshold
 
-// Type alias matching domain naming
-export type NfcwebTagRegistryExportV1 = NFCWebTagRegistryInterchangeSchema;
-export type TagRegistryExportDocumentV1 = NfcwebTagRegistryExportV1;
-
+// Type aliases matching domain and specification naming
 export type {
+  NfcTagRegistryV1,
+  NfcTagV1,
+  NdefRecordV1,
+  TextRecordV1,
+  UrlRecordV1,
+  MimeRecordV1,
+  EmptyRecordV1,
+  NFCWebTagRegistryInterchangeSchema,
   ExportableTagV1,
   NdefRecord,
   TextRecord,
@@ -28,6 +41,9 @@ export type {
   MimeRecord,
   EmptyRecord
 };
+
+export type NfcwebTagRegistryExportV1 = NfcTagRegistryV1;
+export type TagRegistryExportDocumentV1 = NfcTagRegistryV1;
 
 export interface ImportValidationError {
   path: string;
@@ -37,7 +53,7 @@ export interface ImportValidationError {
 
 export interface ImportValidationResult {
   ok: boolean;
-  document?: NfcwebTagRegistryExportV1;
+  document?: NfcTagRegistryV1;
   errors?: ImportValidationError[];
 }
 
@@ -50,7 +66,7 @@ export interface ImportPlanTagAction {
   name?: string;
   recordCount: number;
   localTag?: NFCTagItem;
-  importedTag?: ExportableTagV1;
+  importedTag?: NfcTagV1;
 }
 
 export interface ImportPlan {

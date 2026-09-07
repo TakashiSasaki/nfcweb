@@ -1,8 +1,9 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { schemaRouter } from './src/server/schemaRouter';
 
 export default defineConfig(() => {
   return {
@@ -10,7 +11,7 @@ export default defineConfig(() => {
       react(), 
       tailwindcss(),
       {
-        name: 'error-logger',
+        name: 'schema-and-error-server',
         configureServer(server) {
           server.middlewares.use('/__log_error', (req, res) => {
             let body = '';
@@ -21,6 +22,8 @@ export default defineConfig(() => {
               res.end('ok');
             });
           });
+          // Mount schema router in dev server
+          server.middlewares.use('/schemas', schemaRouter);
         }
       },
       VitePWA({
@@ -33,6 +36,8 @@ export default defineConfig(() => {
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
+          // Explicitly prevent PWA service worker from intercepting schema routes
+          navigateFallbackDenylist: [/^\/schemas/]
         },
         manifest: {
           name: 'NFC Reader & Writer',
