@@ -113,7 +113,7 @@ function AppContent() {
             <div className="flex items-center gap-2">
               <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-blue-950/90 border border-blue-500/40 rounded-xl text-xs text-blue-300 font-medium animate-pulse">
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                <span>かざしてください</span>
+                <span>Hold tag near device</span>
               </div>
               <button
                 onClick={() => store.stopScanning()}
@@ -122,7 +122,7 @@ function AppContent() {
                 aria-label="Stop NFC Scan"
               >
                 <XCircle className="w-3.5 h-3.5 text-white" />
-                <span>スキャン停止</span>
+                <span>Stop Scan</span>
               </button>
             </div>
           ) : (
@@ -139,7 +139,7 @@ function AppContent() {
                 aria-label="Start NFC Tag Scan"
               >
                 <Radio className="w-3.5 h-3.5 text-cyan-300" />
-                <span>スキャン開始</span>
+                <span>Scan Tag</span>
               </button>
             </div>
           )}
@@ -166,7 +166,7 @@ function AppContent() {
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold border border-slate-700 transition-colors shadow-sm cursor-pointer"
               >
                 <ArrowLeft className="w-3.5 h-3.5 text-cyan-400" />
-                <span>タグ一覧に戻る</span>
+                <span>Back to Tags</span>
               </button>
               <span className="text-xs font-mono text-slate-500">
                 Path: <code className="text-cyan-400">#/debug</code>
@@ -178,7 +178,7 @@ function AppContent() {
       </main>
 
       {/* QR Code Modal for sharing URL */}
-      <Modal isOpen={showQRModal} onClose={() => setShowQRModal(false)} title="アプリ共有">
+      <Modal isOpen={showQRModal} onClose={() => setShowQRModal(false)} title="Share App">
         <div className="flex flex-col items-center justify-center p-4 text-center">
           <div className="p-4 bg-white rounded-2xl shadow-md mb-4">
             <QRCodeSVG 
@@ -188,7 +188,7 @@ function AppContent() {
             />
           </div>
           <p className="text-xs text-slate-300 max-w-xs leading-relaxed">
-            スマートフォン (Android Chromeなど) のカメラでスキャンして、Web NFC対応環境で開いてください。
+            Scan with your mobile camera (e.g. Chrome on Android) to open in a Web NFC compatible browser environment.
           </p>
           <div className="mt-3 font-mono text-[11px] text-cyan-300 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 break-all select-all">
             {typeof window !== 'undefined' ? window.location.href : ''}

@@ -45,7 +45,7 @@ export function ExportModal({
       const json = serializeExportDocument(doc);
       return { exportDoc: doc, serializedJson: json, exportError: null };
     } catch (err: any) {
-      return { exportDoc: null, serializedJson: '', exportError: err?.message || 'エクスポートドキュメントの生成に失敗しました。' };
+      return { exportDoc: null, serializedJson: '', exportError: err?.message || 'Failed to generate export document.' };
     }
   }, [tags]);
 
@@ -58,10 +58,10 @@ export function ExportModal({
     try {
       await navigator.clipboard.writeText(serializedJson);
       setCopied(true);
-      showSuccess('JSONをコピーしました', `${totalTagsCount}件のタグレジストリをクリップボードにコピーしました。`);
+      showSuccess('JSON Copied', `Copied ${totalTagsCount} tag(s) to clipboard.`);
       setTimeout(() => setCopied(false), 2000);
     } catch (err: any) {
-      showError('コピー失敗', err?.message || 'クリップボードへのアクセスに失敗しました。');
+      showError('Copy Failed', err?.message || 'Failed to access clipboard.');
     }
   };
 
@@ -70,10 +70,10 @@ export function ExportModal({
     try {
       const filename = generateExportFilename();
       downloadJsonFile(filename, serializedJson);
-      showSuccess('ダウンロード開始', `${filename} を保存しました (${totalTagsCount} 件のタグ)。`);
+      showSuccess('Download Started', `Saved ${filename} (${totalTagsCount} tag(s)).`);
       onClose();
     } catch (err: any) {
-      showError('ダウンロード失敗', err?.message || 'ファイル保存処理中にエラーが発生しました。');
+      showError('Download Failed', err?.message || 'Failed to save export file.');
     }
   };
 
@@ -86,30 +86,30 @@ export function ExportModal({
           <div className="text-xs font-semibold text-slate-300 flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <Layers className="w-4 h-4 text-emerald-400" />
-              <span>エクスポート対象データ</span>
+              <span>Export Registry Target</span>
             </span>
             <span className="font-mono text-emerald-400 font-bold text-sm">
-              {totalTagsCount} 件
+              {totalTagsCount} tags
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="p-2 bg-slate-950/60 rounded-xl border border-slate-800">
-              <span className="text-slate-400 text-[10px]">実測スキャンタグ:</span>
+              <span className="text-slate-400 text-[10px]">Scanned Tags:</span>
               <div className="font-mono font-bold text-emerald-400 text-sm mt-0.5">
-                {physicalCount} 件
+                {physicalCount}
               </div>
             </div>
             <div className="p-2 bg-slate-950/60 rounded-xl border border-slate-800">
-              <span className="text-slate-400 text-[10px]">サンプル模擬タグ:</span>
+              <span className="text-slate-400 text-[10px]">Sample Tags:</span>
               <div className="font-mono font-bold text-cyan-400 text-sm mt-0.5">
-                {sampleCount} 件
+                {sampleCount}
               </div>
             </div>
           </div>
 
           <p className="text-[11px] text-slate-400 leading-relaxed">
-            端末のローカルレジストリに保存されている全タグ（UID、NDEFレコード、カスタム表示名、タイムスタンプ）を標準互換v1形式で出力します。
+            Exports all tags (UIDs, NDEF records, item nicknames, timestamps) currently stored in device local registry into a canonical v1 backup document.
           </p>
         </div>
 
@@ -122,16 +122,16 @@ export function ExportModal({
               </div>
               <div>
                 <span className="text-xs font-bold text-slate-200">
-                  標準JSONフォーマット (Canonical v1)
+                  Standard JSON Format (Canonical v1)
                 </span>
                 <span className="ml-2 text-[9px] font-mono bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-500/30">
-                  公式バックアップ仕様
+                  Official Backup Spec
                 </span>
               </div>
             </div>
           </div>
           <p className="text-[11px] text-slate-300 leading-relaxed">
-            厳格なJSON Schema (Draft 2020-12) で検証可能な形式です。診断ログや端末設定は除外され、ポータブルなタグ台帳のみが出力されます。
+            Strictly validated against JSON Schema (Draft 2020-12). Ephemeral diagnostic logs and hardware settings are omitted to produce a portable tag registry file.
           </p>
 
           <div className="pt-1 flex items-center justify-between text-[11px]">
@@ -147,7 +147,7 @@ export function ExportModal({
               className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer underline hover:no-underline"
             >
               <FileCode className="w-3.5 h-3.5" />
-              <span>データ仕様・スキーマを確認</span>
+              <span>View Data Schema Specification</span>
             </button>
           </div>
         </div>
@@ -156,7 +156,7 @@ export function ExportModal({
         {exportError && (
           <div className="p-3 bg-red-950/60 border border-red-500/40 rounded-xl text-xs space-y-1">
             <div className="font-bold text-red-300 flex items-center gap-1.5">
-              <span>エクスポート不整合エラー</span>
+              <span>Export Invariant Error</span>
             </div>
             <p className="text-red-200 font-mono text-[11px]">{exportError}</p>
           </div>
@@ -165,11 +165,11 @@ export function ExportModal({
         {/* JSON Preview Box */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs text-slate-400">
-            <span className="font-semibold">プレビュー (先頭部分)</span>
+            <span className="font-semibold">JSON Preview</span>
             <span className="font-mono text-[10px]">UTF-8 / 2-space indented</span>
           </div>
           <pre className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[10px] font-mono text-slate-300 max-h-36 overflow-auto select-all leading-relaxed whitespace-pre">
-            {serializedJson ? (serializedJson.slice(0, 800) + (serializedJson.length > 800 ? '\n  ...\n}' : '')) : '(エクスポートデータがありません)'}
+            {serializedJson ? (serializedJson.slice(0, 800) + (serializedJson.length > 800 ? '\n  ...\n}' : '')) : '(No export data)'}
           </pre>
         </div>
 
@@ -180,7 +180,7 @@ export function ExportModal({
             onClick={onClose}
             className="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer border border-slate-700"
           >
-            キャンセル
+            Cancel
           </button>
 
           <button
@@ -192,12 +192,12 @@ export function ExportModal({
             {copied ? (
               <>
                 <Check className="w-4 h-4 text-emerald-400" />
-                <span>コピー完了</span>
+                <span>Copied</span>
               </>
             ) : (
               <>
                 <Copy className="w-4 h-4 text-slate-400" />
-                <span>クリップボードにコピー</span>
+                <span>Copy to Clipboard</span>
               </>
             )}
           </button>
@@ -209,7 +209,7 @@ export function ExportModal({
             className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-40 disabled:hover:bg-emerald-600 disabled:cursor-not-allowed text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-900/30"
           >
             <Download className="w-4 h-4" />
-            <span>JSONダウンロード (.json)</span>
+            <span>Download JSON (.json)</span>
           </button>
         </div>
 

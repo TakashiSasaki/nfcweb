@@ -50,6 +50,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
   const { 
     tags, 
     updateTagName, 
+    updateTagPhoto,
     deleteTag, 
     upsertTag, 
     addLog, 
@@ -162,7 +163,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
     stopSafeErase();
     setIsErasingActive(true);
     setEraseErrorWarning(null);
-    setEraseStatusMessage(`デバイスに対象タグ (UID: ${safeEraseTarget.uid}) をかざしてください...`);
+    setEraseStatusMessage(`Hold target tag (UID: ${safeEraseTarget.uid}) against your device...`);
 
     const targetNormalized = normalizeUid(safeEraseTarget.uid);
 
@@ -181,7 +182,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
         if (!scannedSerial || scannedNormalized !== targetNormalized) {
           // UID MISMATCH - ABORT ERASE IMMEDIATELY & PROTECT DATA!
           stopSafeErase();
-          const errorMsg = `❌ 消去ブロック: かざされたタグのUID [${scannedSerial || '不明'}] が対象 [${safeEraseTarget.uid}] と一致しません。消去は中断されデータは保護されました。`;
+          const errorMsg = `❌ Erase Blocked: Detected tag UID [${scannedSerial || 'Unknown'}] does not match target [${safeEraseTarget.uid}]. Erase aborted to protect tag data.`;
           setEraseErrorWarning(errorMsg);
 
           addLog({
@@ -191,13 +192,13 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
             rawRecords: []
           });
 
-          showWarning('消去ブロック (UID不一致)', `対象: ${safeEraseTarget.uid} / 検出: ${scannedSerial || '不明'}`);
+          showWarning('Erase Blocked (UID Mismatch)', `Target: ${safeEraseTarget.uid} / Detected: ${scannedSerial || 'Unknown'}`);
           return;
         }
 
         // UID MATCHED - Proceed with Safe Erase (Write Empty NDEF)
         try {
-          setEraseStatusMessage(`UID確認完了 (${scannedSerial})。タグを初期化中...`);
+          setEraseStatusMessage(`UID verified (${scannedSerial}). Erasing tag...`);
 
           await ndef.write({ records: [{ recordType: 'empty' }] }, { signal });
 
@@ -216,10 +217,10 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
             rawRecords: []
           });
 
-          showSuccess('タグ初期化完了', `UID [${scannedSerial}] の全データを正常に消去しました。`);
+          showSuccess('Tag Erased', `Successfully cleared all data from UID [${scannedSerial}].`);
           closeSafeEraseModal();
         } catch (writeErr: any) {
-          setEraseErrorWarning(`消去処理エラー: ${writeErr.message}`);
+          setEraseErrorWarning(`Erase error: ${writeErr.message}`);
           showNFCError(writeErr, 'erase');
           stopSafeErase();
         }
@@ -229,18 +230,18 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
         const eventSerial = errEvent?.serialNumber;
         if (eventSerial && normalizeUid(eventSerial) !== targetNormalized) {
           stopSafeErase();
-          const errorMsg = `❌ 消去ブロック: かざされたタグのUID [${eventSerial}] が対象 [${safeEraseTarget.uid}] と一致しません。`;
+          const errorMsg = `❌ Erase Blocked: Detected tag UID [${eventSerial}] does not match target [${safeEraseTarget.uid}].`;
           setEraseErrorWarning(errorMsg);
-          showWarning('消去ブロック (UID不一致)', errorMsg);
+          showWarning('Erase Blocked (UID Mismatch)', errorMsg);
         } else {
-          setEraseErrorWarning('タグ読み取りエラーが発生しました。タグを静止させて再度かざしてください。');
+          setEraseErrorWarning('Tag reading error occurred. Keep the tag steady and try again.');
           showNFCError(new DOMException('Tag was removed too quickly during UID verification', 'NetworkError'), 'erase');
           stopSafeErase();
         }
       };
 
     } catch (err: any) {
-      setEraseErrorWarning(`スキャン開始失敗: ${err.message}`);
+      setEraseErrorWarning(`Failed to start scan: ${err.message}`);
       showNFCError(err, 'erase');
       setIsErasingActive(false);
     }
@@ -271,7 +272,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
         id: `rec-${Date.now()}`,
         recordType: 'text',
         data: 'Hello NFC!',
-        lang: 'ja'
+        lang: 'en'
       }]);
     }
     setWriteErrorWarning(null);
@@ -292,7 +293,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
         id: `rec-${Date.now()}-${prev.length}`,
         recordType: 'text',
         data: '',
-        lang: 'ja'
+        lang: 'en'
       }
     ]);
   };
@@ -314,14 +315,14 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
     }
 
     if (editRecords.length === 0) {
-      showWarning('レコードなし', '少なくとも1つのレコードを追加してください。');
+      showWarning('No Records', 'Please add at least one NDEF record.');
       return;
     }
 
     stopSafeWrite();
     setIsWritingActive(true);
     setWriteErrorWarning(null);
-    setWriteStatusMessage(`対象タグ (UID: ${safeWriteTarget.uid}) をデバイスにかざしてください...`);
+    setWriteStatusMessage(`Hold target tag (UID: ${safeWriteTarget.uid}) against your device...`);
 
     const targetNormalized = normalizeUid(safeWriteTarget.uid);
     const nfcPayload = formatNDEFPayloadForNFC(editRecords);
@@ -341,7 +342,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
         if (!scannedSerial || scannedNormalized !== targetNormalized) {
           // UID MISMATCH - ABORT WRITE IMMEDIATELY & PROTECT DATA!
           stopSafeWrite();
-          const errorMsg = `❌ 書込ブロック: かざされたタグのUID [${scannedSerial || '不明'}] が対象 [${safeWriteTarget.uid}] と一致しません。書き込みは中断され保護されました。`;
+          const errorMsg = `❌ Write Blocked: Detected tag UID [${scannedSerial || 'Unknown'}] does not match target [${safeWriteTarget.uid}]. Write aborted to protect tag data.`;
           setWriteErrorWarning(errorMsg);
 
           addLog({
@@ -351,13 +352,13 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
             rawRecords: []
           });
 
-          showWarning('書込ブロック (UID不一致)', `対象: ${safeWriteTarget.uid} / 検出: ${scannedSerial || '不明'}`);
+          showWarning('Write Blocked (UID Mismatch)', `Target: ${safeWriteTarget.uid} / Detected: ${scannedSerial || 'Unknown'}`);
           return;
         }
 
         // UID MATCHED - Proceed with Safe Write
         try {
-          setWriteStatusMessage(`UID確認完了 (${scannedSerial})。タグに書き込み中...`);
+          setWriteStatusMessage(`UID verified (${scannedSerial}). Writing to tag...`);
 
           await ndef.write(nfcPayload, { signal });
 
@@ -376,10 +377,10 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
             rawRecords: editRecords
           });
 
-          showSuccess('タグ書き込み完了', `UID [${scannedSerial}] に ${editRecords.length} 件のレコードを書き込みました。`);
+          showSuccess('Tag Written', `Successfully wrote ${editRecords.length} record(s) to UID [${scannedSerial}].`);
           closeSafeWriteModal();
         } catch (writeErr: any) {
-          setWriteErrorWarning(`書き込みエラー: ${writeErr.message}`);
+          setWriteErrorWarning(`Write error: ${writeErr.message}`);
           showNFCError(writeErr, 'write');
           stopSafeWrite();
         }
@@ -389,18 +390,18 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
         const eventSerial = errEvent?.serialNumber;
         if (eventSerial && normalizeUid(eventSerial) !== targetNormalized) {
           stopSafeWrite();
-          const errorMsg = `❌ 書込ブロック: かざされたタグのUID [${eventSerial}] が対象 [${safeWriteTarget.uid}] と一致しません。`;
+          const errorMsg = `❌ Write Blocked: Detected tag UID [${eventSerial}] does not match target [${safeWriteTarget.uid}].`;
           setWriteErrorWarning(errorMsg);
-          showWarning('書込ブロック (UID不一致)', errorMsg);
+          showWarning('Write Blocked (UID Mismatch)', errorMsg);
         } else {
-          setWriteErrorWarning('タグ読み取りエラーが発生しました。タグを静止させて再度かざしてください。');
+          setWriteErrorWarning('Tag reading error occurred. Keep the tag steady and try again.');
           showNFCError(new DOMException('Tag was removed too quickly during UID verification', 'NetworkError'), 'write');
           stopSafeWrite();
         }
       };
 
     } catch (err: any) {
-      setWriteErrorWarning(`スキャン開始失敗: ${err.message}`);
+      setWriteErrorWarning(`Failed to start scan: ${err.message}`);
       showNFCError(err, 'write');
       setIsWritingActive(false);
     }
@@ -504,7 +505,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
           <div className="flex items-center justify-between px-3.5 py-2 bg-blue-900/50 border border-blue-500/50 rounded-xl text-xs text-blue-200 font-medium shadow-sm">
             <div className="flex items-center gap-2 min-w-0">
               <Loader2 className="w-4 h-4 animate-spin text-cyan-400 flex-shrink-0" />
-              <span className="truncate">NFCスキャン待機中: デバイスのリーダー部にタグをかざしてください</span>
+              <span className="truncate">NFC Scan in Progress: Hold a tag near your device's NFC antenna</span>
             </div>
             <button
               type="button"
@@ -512,7 +513,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
               className="flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer flex-shrink-0 ml-2"
             >
               <XCircle className="w-3.5 h-3.5" />
-              <span>停止</span>
+              <span>Stop</span>
             </button>
           </div>
         </div>
@@ -524,8 +525,8 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
           <div className="flex items-center gap-2 min-w-0">
             <Search className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
             <span className="truncate">
-              検索条件: <span className="font-semibold text-white">"{searchQuery}"</span>
-              <span className="text-slate-400 ml-1.5 font-mono">({filteredTags.length}件)</span>
+              Filter: <span className="font-semibold text-white">"{searchQuery}"</span>
+              <span className="text-slate-400 ml-1.5 font-mono">({filteredTags.length} matches)</span>
             </span>
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
@@ -534,16 +535,16 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
               onClick={openSearchModal}
               className="text-[11px] text-cyan-300 hover:text-white px-2 py-0.5 rounded bg-blue-900/40 hover:bg-blue-800/60 border border-blue-500/30 transition-colors cursor-pointer"
             >
-              条件変更
+              Edit Filter
             </button>
             <button
               type="button"
               onClick={() => setSearchQuery('')}
               className="flex items-center gap-0.5 text-[11px] text-slate-400 hover:text-white px-1.5 py-0.5 rounded hover:bg-slate-800 transition-colors cursor-pointer"
-              title="検索を解除"
+              title="Clear Search"
             >
               <X className="w-3 h-3" />
-              <span>解除</span>
+              <span>Clear</span>
             </button>
           </div>
         </div>
@@ -563,7 +564,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
             <p className="text-sm font-semibold text-slate-300">No NFC inventory items found</p>
             <p className="text-xs text-slate-500 mt-1 max-w-sm leading-relaxed">
               {searchQuery 
-                ? '検索条件に一致するタグが見つかりませんでした。条件を変更またはクリアしてください。'
+                ? 'No tags matched your search criteria. Try modifying or clearing the filter.'
                 : 'Tap "Scan NFC Tag" above and hold a tag near your phone to automatically register its item here.'}
             </p>
             {searchQuery && tags.length > 0 && (
@@ -572,7 +573,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
                 onClick={() => setSearchQuery('')}
                 className="mt-3 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-medium border border-slate-700 transition-colors cursor-pointer shadow-sm"
               >
-                検索条件をクリア
+                Clear Search Filter
               </button>
             )}
             {tags.length === 0 && (
@@ -604,6 +605,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
                 onOpenSafeErase={openSafeEraseModal}
                 onDeleteTag={deleteTag}
                 onShowInfo={showInfo}
+                onUpdatePhoto={updateTagPhoto}
               />
             ))}
 
@@ -640,7 +642,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  対象タグ (UIDロック確認中)
+                  Target Tag (UID Lock Verification)
                 </span>
                 <span className="px-2 py-0.5 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 rounded text-[10px] font-mono font-bold">
                   UID LOCKED
@@ -651,7 +653,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
                 {safeWriteTarget.name && <span className="text-slate-300 font-sans">{safeWriteTarget.name}</span>}
               </div>
               <p className="text-[11px] text-emerald-300 bg-emerald-950/40 p-2 rounded-lg border border-emerald-500/20 leading-relaxed">
-                🔒 <b>誤書き込み防止:</b> かざされたタグのUIDを事前検証し、<b>{safeWriteTarget.uid}</b> のみ書き込みます。別のタグがかざされた場合は自動的に中断されます。
+                🔒 <b>Write Protection:</b> Verifies the scanned tag UID and only writes to <b>{safeWriteTarget.uid}</b>. If another tag is presented, the operation is blocked to preserve data.
               </p>
             </div>
 
@@ -659,7 +661,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
             <div className="space-y-3 max-h-[45vh] overflow-y-auto pr-1">
               <div className="flex items-center justify-between">
                 <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  NDEF レコード編集 ({editRecords.length})
+                  NDEF Records ({editRecords.length})
                 </h5>
                 <button
                   type="button"
@@ -667,7 +669,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
                   className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>レコード追加</span>
+                  <span>Add Record</span>
                 </button>
               </div>
 
@@ -692,11 +694,11 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
                     {rec.recordType === 'text' && (
                       <input
                         type="text"
-                        value={rec.lang || 'ja'}
+                        value={rec.lang || 'en'}
                         onChange={e => handleUpdateRecord(rec.id, { lang: e.target.value })}
                         placeholder="lang"
                         className="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-center font-mono text-slate-300"
-                        title="Language code (e.g. ja, en)"
+                        title="Language code (e.g. en, ja)"
                       />
                     )}
 
@@ -728,7 +730,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
                     placeholder={
                       rec.recordType === 'url' ? 'https://example.com' :
                       rec.recordType === 'mime' ? '{"key": "value"}' :
-                      '書き込みたいテキストを入力...'
+                      'Enter payload text...'
                     }
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 font-mono placeholder:text-slate-600 focus:border-blue-500 focus:outline-none"
                   />
@@ -740,7 +742,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs">
               <span className="text-slate-400 flex items-center gap-1">
                 <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
-                予定ペイロード: <span className="font-mono text-white font-bold">{writeCapacity.bytes} B</span>
+                Estimated Payload: <span className="font-mono text-white font-bold">{writeCapacity.bytes} B</span>
               </span>
               <span className={`font-semibold ${
                 writeCapacity.badgeColor === 'emerald' ? 'text-emerald-400' :
@@ -756,7 +758,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
             {isWritingActive && (
               <div className="p-3 rounded-xl bg-blue-950/80 border border-blue-500/40 flex items-center gap-2.5 text-xs text-blue-200 animate-pulse">
                 <Loader2 className="w-4 h-4 animate-spin text-cyan-400 flex-shrink-0" />
-                <span>{writeStatusMessage || '対象タグをデバイスにかざしてください...'}</span>
+                <span>{writeStatusMessage || 'Hold target tag against device...'}</span>
               </div>
             )}
 
@@ -774,7 +776,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
                 onClick={closeSafeWriteModal}
                 className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-semibold text-xs sm:text-sm transition-colors"
               >
-                閉じる
+                Close
               </button>
 
               {isWritingActive ? (
@@ -783,7 +785,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
                   onClick={stopSafeWrite}
                   className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold text-xs sm:text-sm transition-colors"
                 >
-                  待機を停止
+                  Stop Waiting
                 </button>
               ) : (
                 <button
@@ -807,7 +809,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
         <Modal
           isOpen={true}
           onClose={closeSafeEraseModal}
-          title="NFCタグ初期化（安全消去）"
+          title="Erase / Reset NFC Tag"
         >
           <div className="p-3 sm:p-4 space-y-4 text-center">
             <div className="w-12 h-12 mx-auto rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center">
@@ -816,10 +818,10 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
 
             <div>
               <h4 className="text-base sm:text-lg font-bold text-white mb-1">
-                このNFCタグを初期化（消去）しますか？
+                Erase this NFC Tag?
               </h4>
               <p className="text-xs text-slate-300 leading-relaxed max-w-sm mx-auto">
-                タグ内の全NDEFレコードを消去し、空（<code className="text-cyan-300 font-mono">empty</code>）の状態にリセットします。
+                This will clear all NDEF records on the tag and reset it to an empty (<code className="text-cyan-300 font-mono">empty</code>) state.
               </p>
             </div>
 
@@ -828,7 +830,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  UID事前検査安全ロック
+                  UID Pre-Verification Safety Lock
                 </span>
                 <span className="px-2 py-0.5 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 rounded text-[10px] font-mono font-bold">
                   UID LOCKED
@@ -837,27 +839,27 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
 
               <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-700/80 space-y-1">
                 <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                  消去対象タグ UID:
+                  Target Tag UID:
                 </div>
                 <div className="font-mono text-sm font-bold text-cyan-300 select-all">
                   {safeEraseTarget.uid}
                 </div>
                 {safeEraseTarget.name && (
                   <div className="text-xs text-slate-300">
-                    タグ名: <span className="font-semibold text-white">{safeEraseTarget.name}</span>
+                    Item Name: <span className="font-semibold text-white">{safeEraseTarget.name}</span>
                   </div>
                 )}
               </div>
 
               <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[11px] text-emerald-300 leading-relaxed">
-                🔒 <b>誤消去防止機構:</b> 消去を実行する前にタグのUIDを読み取ります。UIDが <b>{safeEraseTarget.uid}</b> と完全一致する場合のみ消去し、<b>別のタグがかざされた場合は自動的に処理をブロック</b>してデータを保護します。
+                🔒 <b>Accidental Erase Prevention:</b> Scans the tag UID prior to erasing. It will only erase if the detected UID exactly matches <b>{safeEraseTarget.uid}</b>. If any other tag is presented, the operation is automatically blocked.
               </div>
 
               {/* Real-time scanning status */}
               {isErasingActive && (
                 <div className="p-3 rounded-lg bg-blue-950/60 border border-blue-500/40 flex items-center gap-2.5 text-xs text-blue-200 animate-pulse">
                   <Loader2 className="w-4 h-4 animate-spin text-cyan-400 flex-shrink-0" />
-                  <span>{eraseStatusMessage || '対象タグをデバイスにかざしてください...'}</span>
+                  <span>{eraseStatusMessage || 'Hold target tag against device...'}</span>
                 </div>
               )}
 
@@ -876,7 +878,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
                 onClick={closeSafeEraseModal}
                 className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-semibold text-xs sm:text-sm transition-colors"
               >
-                キャンセル
+                Cancel
               </button>
 
               {isErasingActive ? (
@@ -885,7 +887,7 @@ export function TagsInfiniteListView({ store }: TagsInfiniteListViewProps) {
                   onClick={stopSafeErase}
                   className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold text-xs sm:text-sm transition-colors"
                 >
-                  待機を停止
+                  Stop Waiting
                 </button>
               ) : (
                 <button

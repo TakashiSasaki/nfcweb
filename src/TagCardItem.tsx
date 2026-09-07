@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   Tag, 
   Copy, 
@@ -18,11 +18,18 @@ import {
   Radio, 
   Package,
   Clock,
-  HardDrive
+  HardDrive,
+  Camera,
+  Image as ImageIcon,
+  Upload,
+  Loader2,
+  X
 } from 'lucide-react';
 import { NFCTagItem } from './types';
 import { analyzeNTAGCapacity } from './store';
 import { renderControlCharContent, ControlCharViewer, analyzeControlChars } from './ControlCharViewer';
+import { getPhotoAssetBlob, normalizeAndStorePhoto } from './storage/photoAssetStorage';
+import { Modal } from './Modal';
 
 export interface TagCardItemProps {
   key?: React.Key;
@@ -38,6 +45,7 @@ export interface TagCardItemProps {
   onOpenSafeErase: (tag: NFCTagItem) => void;
   onDeleteTag: (uid: string) => void;
   onShowInfo: (title: string, message: string) => void;
+  onUpdatePhoto?: (uid: string, photoAssetId?: string, photoUrl?: string) => Promise<void> | void;
   /** Optional thumbnail override for future photo support */
   thumbnailUrl?: string;
 }
@@ -55,6 +63,7 @@ export function TagCardItem({
   onOpenSafeErase,
   onDeleteTag,
   onShowInfo,
+  onUpdatePhoto,
   thumbnailUrl
 }: TagCardItemProps) {
   // Progressive disclosure state (technical details accordion)
@@ -63,12 +72,66 @@ export function TagCardItem({
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   // Thumbnail load error fallback state
   const [imageError, setImageError] = useState<boolean>(false);
+  // Local Object URL loaded from IndexedDB asset
+  const [localPhotoUrl, setLocalPhotoUrl] = useState<string | null>(null);
+  // Photo uploading / normalizing status
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
+  // Full image preview modal
+  const [isPreviewOpen, setIsPreviewOpen] = useState<boolean>(false);
+
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const previousObjectUrlRef = useRef<string | null>(null);
 
   const isEditingThis = editingNameUid === tag.uid;
   const hasRecords = Boolean(tag.records && tag.records.length > 0);
   const capacity = analyzeNTAGCapacity(tag.records || []);
-  const photo = thumbnailUrl || tag.photoUrl;
+
+  // Load photo asset from IndexedDB when photoAssetId changes, with strict Object URL cleanup
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (tag.photoAssetId) {
+      getPhotoAssetBlob(tag.photoAssetId)
+        .then((blob) => {
+          if (isCancelled) return;
+          if (blob) {
+            // Revoke old URL before creating new one
+            if (previousObjectUrlRef.current) {
+              URL.revokeObjectURL(previousObjectUrlRef.current);
+            }
+            const objectUrl = URL.createObjectURL(blob);
+            previousObjectUrlRef.current = objectUrl;
+            setLocalPhotoUrl(objectUrl);
+            setImageError(false);
+          } else {
+            setLocalPhotoUrl(null);
+          }
+        })
+        .catch((err) => {
+          if (!isCancelled) {
+            console.warn('Failed to load photo asset for tag:', tag.uid, err);
+            setLocalPhotoUrl(null);
+          }
+        });
+    } else {
+      if (previousObjectUrlRef.current) {
+        URL.revokeObjectURL(previousObjectUrlRef.current);
+        previousObjectUrlRef.current = null;
+      }
+      setLocalPhotoUrl(null);
+    }
+
+    return () => {
+      isCancelled = true;
+      if (previousObjectUrlRef.current) {
+        URL.revokeObjectURL(previousObjectUrlRef.current);
+        previousObjectUrlRef.current = null;
+      }
+    };
+  }, [tag.photoAssetId]);
+
+  const photo = thumbnailUrl || localPhotoUrl || tag.photoUrl;
 
   // Clean canonical UID metrics
   const cleanHex = tag.uid.replace(/[:-]/g, '');
@@ -104,6 +167,39 @@ export function TagCardItem({
     };
   }, [isMenuOpen]);
 
+  // Photo change / upload handler
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset input value so same file can be re-selected if desired
+    e.target.value = '';
+
+    try {
+      setIsUploadingPhoto(true);
+      const assetId = await normalizeAndStorePhoto(file, { maxDimension: 1280, quality: 0.85 });
+      
+      if (onUpdatePhoto) {
+        await onUpdatePhoto(tag.uid, assetId);
+      }
+      onShowInfo('Photo Saved', `Stored local photo for tag [${tag.uid}].`);
+    } catch (err: any) {
+      console.error('Failed to normalize and save photo:', err);
+      onShowInfo('Photo Error', err?.message || 'Failed to process selected image.');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleRemovePhoto = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (onUpdatePhoto) {
+      await onUpdatePhoto(tag.uid, undefined, undefined);
+    }
+    setLocalPhotoUrl(null);
+    onShowInfo('Photo Removed', `Removed photo for tag [${tag.uid}].`);
+  };
+
   // Primary record for quick common-case glance
   const primaryRecord = hasRecords ? tag.records[0] : null;
 
@@ -117,6 +213,16 @@ export function TagCardItem({
       id={`inventory-item-${tag.uid}`}
       data-testid={`inventory-item-${tag.uid}`}
     >
+      {/* Hidden file input for capturing / uploading item photo */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handlePhotoFileChange}
+        accept="image/*"
+        aria-label="Upload item photo"
+        className="hidden"
+      />
+
       {/* 
         ========================================================================
         COMPACT INVENTORY ROW (Always visible, highly scannable)
@@ -125,21 +231,39 @@ export function TagCardItem({
       <div className="p-3 sm:p-3.5">
         <div className="flex items-start sm:items-center gap-3">
           
-          {/* Optional Item Photo Thumbnail with Accessible Fallback */}
+          {/* Item Photo Thumbnail with Accessible Fallback & Quick Actions */}
           <div 
             data-testid="tag-photo-container"
-            className="relative w-11 h-11 sm:w-13 sm:h-13 rounded-xl overflow-hidden flex-shrink-0 bg-slate-800/80 border border-slate-700/60 shadow-inner flex items-center justify-center select-none"
+            onClick={() => {
+              if (photo && !imageError) {
+                setIsPreviewOpen(true);
+              } else {
+                fileInputRef.current?.click();
+              }
+            }}
+            className="relative w-11 h-11 sm:w-13 sm:h-13 rounded-xl overflow-hidden flex-shrink-0 bg-slate-800/80 border border-slate-700/60 shadow-inner flex items-center justify-center select-none cursor-pointer group/photo"
+            title={photo && !imageError ? "Click to preview or change photo" : "Click to add photo"}
           >
-            {photo && !imageError ? (
-              <img
-                data-testid="tag-photo-img"
-                src={photo}
-                alt={tag.name ? `Photo of ${tag.name}` : `Item photo for UID ${tag.uid}`}
-                onError={() => setImageError(true)}
-                referrerPolicy="no-referrer"
-                loading="lazy"
-                className="w-full h-full object-cover"
-              />
+            {isUploadingPhoto ? (
+              <div className="w-full h-full flex items-center justify-center bg-slate-900/90 text-sky-400">
+                <Loader2 className="w-5 h-5 animate-spin" />
+              </div>
+            ) : photo && !imageError ? (
+              <>
+                <img
+                  data-testid="tag-photo-img"
+                  src={photo}
+                  alt={tag.name ? `Photo of ${tag.name}` : `Item photo for UID ${tag.uid}`}
+                  onError={() => setImageError(true)}
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                  className="w-full h-full object-cover group-hover/photo:scale-105 transition-transform duration-200"
+                />
+                {/* Hover overlay icon */}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/photo:opacity-100 flex items-center justify-center transition-opacity">
+                  <Camera className="w-4 h-4 text-white drop-shadow" />
+                </div>
+              </>
             ) : (
               /* Lightweight, quiet fallback (not an oversized broken placeholder) */
               <div 
@@ -155,6 +279,10 @@ export function TagCardItem({
                 ) : (
                   <Radio className="w-5 h-5 text-slate-400/80" aria-hidden="true" />
                 )}
+                {/* Hover hint */}
+                <div className="absolute inset-0 bg-sky-950/70 opacity-0 group-hover/photo:opacity-100 flex items-center justify-center transition-opacity">
+                  <Camera className="w-3.5 h-3.5 text-sky-300" />
+                </div>
               </div>
             )}
           </div>
@@ -345,7 +473,7 @@ export function TagCardItem({
               )}
             </button>
 
-            {/* Overflow Menu (⋯ for Rename, Details, Destructive Erase, Remove) */}
+            {/* Overflow Menu (⋯ for Rename, Photo, Details, Destructive Erase, Remove) */}
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
@@ -369,7 +497,7 @@ export function TagCardItem({
                 <div 
                   role="menu"
                   data-testid="tag-overflow-menu"
-                  className="absolute right-0 top-full mt-1 w-44 bg-[#0F172A] border border-slate-700/90 rounded-xl shadow-xl shadow-black/60 p-1 z-30 animate-fade-in text-xs font-medium"
+                  className="absolute right-0 top-full mt-1 w-48 bg-[#0F172A] border border-slate-700/90 rounded-xl shadow-xl shadow-black/60 p-1 z-30 animate-fade-in text-xs font-medium"
                 >
                   <button
                     type="button"
@@ -383,6 +511,34 @@ export function TagCardItem({
                     <Edit3 className="w-3.5 h-3.5 text-slate-400" />
                     <span>Rename</span>
                   </button>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={(e) => {
+                      setIsMenuOpen(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-200 hover:text-white hover:bg-slate-800 flex items-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-sky-400" />
+                    <span>{photo ? 'Change photo' : 'Add photo'}</span>
+                  </button>
+
+                  {photo && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={(e) => {
+                        setIsMenuOpen(false);
+                        handleRemovePhoto(e);
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-amber-300 hover:text-amber-100 hover:bg-amber-500/20 flex items-center gap-2 cursor-pointer transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Remove photo</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"
@@ -589,6 +745,15 @@ export function TagCardItem({
                 <Trash2 className="w-3 h-3 text-rose-400" />
                 <span>Erase tag</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="px-2.5 py-1 rounded-lg text-sky-300 hover:text-sky-100 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 font-medium transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <Camera className="w-3 h-3 text-sky-400" />
+                <span>{photo ? 'Change photo' : 'Add photo'}</span>
+              </button>
             </div>
 
             <button
@@ -603,6 +768,54 @@ export function TagCardItem({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Photo Preview Modal */}
+      {isPreviewOpen && photo && (
+        <Modal
+          isOpen={true}
+          onClose={() => setIsPreviewOpen(false)}
+          title={tag.name ? `Item Photo: ${tag.name}` : `Item Photo (${tag.uid})`}
+        >
+          <div className="space-y-4">
+            <div className="w-full max-h-[60vh] rounded-xl overflow-hidden bg-slate-950 flex items-center justify-center border border-slate-800">
+              <img
+                src={photo}
+                alt={tag.name || tag.uid}
+                className="max-w-full max-h-[60vh] object-contain rounded-lg"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={handleRemovePhoto}
+                className="flex items-center gap-1 px-3 py-2 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 rounded-xl text-xs font-semibold border border-rose-500/30 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Remove Photo</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1 px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Replace Photo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold border border-slate-700 transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

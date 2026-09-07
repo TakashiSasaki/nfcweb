@@ -89,10 +89,10 @@ export function ImportModal({
       setValidationErrors([
         {
           path: '#/fileSize',
-          message: `ファイルサイズ超過: ${actualMb} MiB (上限は ${mbLimit} MiB です)。`
+          message: `File size exceeds limit: ${actualMb} MiB (limit is ${mbLimit} MiB).`
         }
       ]);
-      showError('サイズ超過', `インポート可能なファイル上限は ${mbLimit} MiB です。`);
+      showError('Size Limit Exceeded', `Import file size limit is ${mbLimit} MiB.`);
       return;
     }
 
@@ -103,7 +103,7 @@ export function ImportModal({
       setIsProcessing(false);
       const text = e.target?.result;
       if (typeof text !== 'string') {
-        setValidationErrors([{ path: '#', message: 'ファイルの読み込みに失敗しました。' }]);
+        setValidationErrors([{ path: '#', message: 'Failed to read file contents.' }]);
         return;
       }
 
@@ -115,19 +115,19 @@ export function ImportModal({
         setValidationErrors([
           {
             path: '#/syntax',
-            message: `不正なJSON構文です: ${err?.message || '構文解析に失敗しました'}`
+            message: `Invalid JSON syntax: ${err?.message || 'Syntax parse failed'}`
           }
         ]);
-        showError('JSON構文エラー', 'ファイルのJSON構文が壊れているため解析できませんでした。');
+        showError('JSON Syntax Error', 'Failed to parse JSON syntax from uploaded file.');
         return;
       }
 
       // 3. Schema & Canonical Validation (Draft 2020-12 SSOT)
       const result = validateImportPayload(parsed);
       if (!result.ok || !result.document) {
-        const errors = result.errors || [{ path: '#', message: '検証エラーが発生しました' }];
+        const errors = result.errors || [{ path: '#', message: 'Validation error occurred' }];
         setValidationErrors(errors);
-        showError('検証失敗', `スキーマまたはデータの不整合が ${errors.length} 件検出されました。`);
+        showError('Validation Failed', `Found ${errors.length} schema or invariant issue(s).`);
         return;
       }
 
@@ -137,12 +137,12 @@ export function ImportModal({
       const plan = buildImportPlan(validDoc, localTags, importMode);
       setImportPlan(plan);
 
-      showInfo('検証完了', `${validDoc.tags.length} 件のタグデータをプレビュー準備しました。`);
+      showInfo('Validation Succeeded', `Prepared preview for ${validDoc.tags.length} tag(s).`);
     };
 
     reader.onerror = () => {
       setIsProcessing(false);
-      setValidationErrors([{ path: '#', message: 'ファイル読み込み中にI/Oエラーが発生しました。' }]);
+      setValidationErrors([{ path: '#', message: 'I/O error occurred while reading file.' }]);
     };
 
     reader.readAsText(file, 'utf-8');
@@ -174,7 +174,7 @@ export function ImportModal({
     if (!importPlan) return;
 
     if (importMode === 'replace' && !confirmReplaceChecked) {
-      showError('確認が必要です', '置換モードを実行するには、既存データ消去への同意チェックが必要です。');
+      showError('Confirmation Required', 'You must agree to erase existing data to proceed with Replace mode.');
       return;
     }
 
@@ -184,17 +184,17 @@ export function ImportModal({
       // Mutate through store and handle storage quota safety
       const commitRes = onCommitImport(resultingTags);
       if (!commitRes.success) {
-        showError('ストレージ保存エラー', commitRes.error || 'ローカルストレージへの永続化に失敗しました。');
+        showError('Storage Error', commitRes.error || 'Failed to persist imported tags to local storage.');
         return;
       }
 
       showSuccess(
-        importMode === 'merge' ? 'マージ完了' : '置換完了',
-        `${importPlan.importCount} 件を取り込みました (登録タグ総数: ${resultingTags.length} 件)。`
+        importMode === 'merge' ? 'Merge Complete' : 'Replace Complete',
+        `Imported ${importPlan.importCount} tag(s) (total registered tags: ${resultingTags.length}).`
       );
       handleModalClose();
     } catch (err: any) {
-      showError('インポート失敗', err?.message || 'インポート適用中に予期しないエラーが発生しました。');
+      showError('Import Failed', err?.message || 'Unexpected error occurred while applying import plan.');
     }
   };
 
@@ -206,8 +206,8 @@ export function ImportModal({
         <div className="p-3 bg-blue-950/40 border border-blue-500/30 rounded-2xl flex items-start gap-2.5 text-xs">
           <Info className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
           <div className="leading-relaxed text-slate-300">
-            <span className="font-bold text-cyan-300">安全確認: </span>
-            インポートは端末のローカルレジストリ（ブラウザ内ストレージ）のみを変更します。物理的なNFCタグへの無線通信・書き込みは一切行いません。
+            <span className="font-bold text-cyan-300">Safety Notice: </span>
+            Importing modifies only the browser's local tag registry. It never performs wireless transmission or writing to physical NFC hardware tags.
           </div>
         </div>
 
@@ -238,16 +238,16 @@ export function ImportModal({
               </div>
               <div className="space-y-1">
                 <p className="text-xs sm:text-sm font-bold text-slate-100">
-                  JSONファイルをここにドロップ
+                  Drop JSON file here
                 </p>
                 <p className="text-xs text-slate-400">
-                  または <span className="text-cyan-400 font-semibold underline">ファイルを選択</span>
+                  or <span className="text-cyan-400 font-semibold underline">browse file</span>
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2 text-[10px] font-mono text-slate-500">
-                <span>対応形式: .json (Canonical v1 / Draft 2020-12)</span>
+                <span>Supported format: .json (Canonical v1 / Draft 2020-12)</span>
                 <span>•</span>
-                <span>上限: 5 MiB</span>
+                <span>Max size: 5 MiB</span>
               </div>
             </div>
 
@@ -256,7 +256,7 @@ export function ImportModal({
               <div className="p-3.5 bg-red-950/40 border border-red-500/40 rounded-2xl space-y-2">
                 <div className="flex items-center gap-2 text-xs font-bold text-red-300">
                   <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                  <span>バリデーションエラー ({validationErrors.length} 件)</span>
+                  <span>Validation Errors ({validationErrors.length})</span>
                 </div>
                 <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
                   {validationErrors.map((err, idx) => (
@@ -266,7 +266,7 @@ export function ImportModal({
                   ))}
                 </div>
                 <p className="text-[10px] text-slate-400">
-                  既存のタグデータは保護されており、変更されていません。スキーマ仕様を満たす正しいファイルを選択してください。
+                  Existing tags are safely preserved and have not been modified. Please provide a valid file matching the specification.
                 </p>
               </div>
             )}
@@ -293,57 +293,57 @@ export function ImportModal({
                 onClick={resetImportState}
                 className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium transition-colors border border-slate-700 cursor-pointer flex-shrink-0"
               >
-                ファイルを再選択
+                Choose another file
               </button>
             </div>
 
             {/* Preflight Statistics Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
               <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800">
-                <div className="text-[10px] text-slate-400">現在 / 取込総数</div>
+                <div className="text-[10px] text-slate-400">Current / Incoming</div>
                 <div className="text-sm font-bold font-mono text-cyan-300 mt-0.5">
-                  {importPlan.currentCount} → {importPlan.importCount} 件
+                  {importPlan.currentCount} → {importPlan.importCount}
                 </div>
               </div>
               <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800">
-                <div className="text-[10px] text-slate-400">新規追加</div>
+                <div className="text-[10px] text-slate-400">New Tags</div>
                 <div className="text-sm font-bold font-mono text-emerald-400 mt-0.5">
-                  +{importPlan.newCount} 件
+                  +{importPlan.newCount}
                 </div>
               </div>
               <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800">
                 <div className="text-[10px] text-slate-400">
-                  {importMode === 'merge' ? '上書き更新' : '消去対象'}
+                  {importMode === 'merge' ? 'Overwritten' : 'Removed'}
                 </div>
                 <div className={`text-sm font-bold font-mono mt-0.5 ${
                   importMode === 'merge' ? 'text-amber-400' : 'text-red-400'
                 }`}>
-                  {importMode === 'merge' ? `${importPlan.updateCount} 件` : `-${importPlan.removedCount} 件`}
+                  {importMode === 'merge' ? `${importPlan.updateCount}` : `-${importPlan.removedCount}`}
                 </div>
               </div>
               <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800">
-                <div className="text-[10px] text-slate-400">反映後タグ総数</div>
+                <div className="text-[10px] text-slate-400">Resulting Total</div>
                 <div className="text-sm font-bold font-mono text-cyan-300 mt-0.5">
-                  {importPlan.resultingCount} 件
+                  {importPlan.resultingCount}
                 </div>
               </div>
             </div>
 
             {/* Detailed Delta Breakdown */}
             <div className="flex flex-wrap items-center justify-between gap-1.5 px-2.5 py-1.5 bg-slate-950/40 rounded-lg border border-slate-800/80 text-[10px] font-mono text-slate-400">
-              <span>維持: {importPlan.unchangedCount} 件</span>
+              <span>Retained: {importPlan.unchangedCount}</span>
               <span>•</span>
-              <span>更新: {importPlan.updateCount} 件</span>
+              <span>Updated: {importPlan.updateCount}</span>
               <span>•</span>
-              <span>削除: {importPlan.removedCount} 件</span>
+              <span>Removed: {importPlan.removedCount}</span>
               <span>•</span>
-              <span className="text-cyan-400 font-bold">差分合計: {importPlan.actions.length} 件</span>
+              <span className="text-cyan-400 font-bold">Total Delta: {importPlan.actions.length}</span>
             </div>
 
             {/* Mode Selector */}
             <div className="space-y-2">
               <label className="text-xs font-semibold text-slate-300 block">
-                取り込みモードを選択
+                Select Import Mode
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {/* Merge Option */}
@@ -357,14 +357,14 @@ export function ImportModal({
                   }`}
                 >
                   <div className="text-xs font-bold flex items-center justify-between">
-                    <span>マージ (推奨)</span>
+                    <span>Merge (Recommended)</span>
                     {importMode === 'merge' && <CheckCircle2 className="w-4 h-4 text-cyan-400" />}
                   </div>
                   <p className="text-[10px] text-slate-300 mt-1 leading-relaxed">
-                    既存データを維持しながら新規UIDを追加。重複時はファイル側レコードで上書き更新。
+                    Preserves existing tags while adding new UIDs. Overwrites matching UIDs with imported data.
                   </p>
                   <div className="mt-2 text-[10px] font-mono text-cyan-300/80">
-                    反映後: {importPlan.resultingCount} 件
+                    Result: {importPlan.resultingCount} tags
                   </div>
                 </button>
 
@@ -379,14 +379,14 @@ export function ImportModal({
                   }`}
                 >
                   <div className="text-xs font-bold flex items-center justify-between">
-                    <span>置換 (完全置換)</span>
+                    <span>Replace (Full Overwrite)</span>
                     {importMode === 'replace' && <CheckCircle2 className="w-4 h-4 text-red-400" />}
                   </div>
                   <p className="text-[10px] text-slate-300 mt-1 leading-relaxed">
-                    既存レジストリを全消去し、ファイル内の登録データのみに完全入れ替え。
+                    Clears the entire local registry and replaces it exclusively with tags from the file.
                   </p>
                   <div className="mt-2 text-[10px] font-mono text-red-300/80">
-                    反映後: {importPlan.resultingCount} 件
+                    Result: {importPlan.resultingCount} tags
                   </div>
                 </button>
               </div>
@@ -398,7 +398,7 @@ export function ImportModal({
                 <div className="flex items-start gap-2 text-xs text-red-200">
                   <ShieldAlert className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
                   <span className="leading-relaxed">
-                    注意: 置換モードは既存の全登録タグ ({localTags.length} 件) を消去します。この操作は取り消せません。
+                    Warning: Replace mode permanently erases all {localTags.length} existing tag(s). This action cannot be undone.
                   </span>
                 </div>
                 <label className="flex items-center gap-2 text-xs text-slate-200 font-semibold cursor-pointer select-none pt-1">
@@ -408,7 +408,7 @@ export function ImportModal({
                     onChange={(e) => setConfirmReplaceChecked(e.target.checked)}
                     className="w-4 h-4 rounded text-red-600 bg-slate-900 border-slate-600 focus:ring-red-500"
                   />
-                  <span>既存データを消去して完全置換することに同意します</span>
+                  <span>I understand and agree to erase existing data for full replacement</span>
                 </label>
               </div>
             )}
@@ -416,8 +416,8 @@ export function ImportModal({
             {/* Diff Preview List */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-[11px] text-slate-400">
-                <span className="font-semibold">取り込み対象アクションプレビュー</span>
-                <span>全 {importPlan.actions.length} 件</span>
+                <span className="font-semibold">Action Preview</span>
+                <span>{importPlan.actions.length} action(s)</span>
               </div>
               <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
                 {importPlan.actions.slice(0, 15).map((action, i) => (
@@ -435,7 +435,7 @@ export function ImportModal({
                           ? 'bg-red-500/20 text-red-300 border border-red-500/30'
                           : 'bg-slate-800 text-slate-400'
                       }`}>
-                        {action.status === 'new' ? '新規追加' : action.status === 'update' ? '更新' : action.status === 'remove' ? '削除' : '維持'}
+                        {action.status === 'new' ? 'New' : action.status === 'update' ? 'Update' : action.status === 'remove' ? 'Remove' : 'Retain'}
                       </span>
                       <span className="font-mono text-slate-300">{action.uid}</span>
                       {action.name && <span className="text-slate-400 truncate">({action.name})</span>}
@@ -462,7 +462,7 @@ export function ImportModal({
             className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer underline hover:no-underline"
           >
             <FileCode className="w-4 h-4" />
-            <span>データ仕様・スキーマを確認</span>
+            <span>View Data Schema Specification</span>
           </button>
 
           <div className="flex items-center gap-2 ml-auto">
@@ -471,7 +471,7 @@ export function ImportModal({
               onClick={handleModalClose}
               className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer border border-slate-700"
             >
-              閉じる
+              Close
             </button>
 
             {validatedDoc && importPlan && (
@@ -487,7 +487,7 @@ export function ImportModal({
               >
                 <Upload className="w-4 h-4" />
                 <span>
-                  {importMode === 'merge' ? 'マージを実行' : '置換を実行'}
+                  {importMode === 'merge' ? 'Execute Merge' : 'Execute Replace'}
                 </span>
               </button>
             )}

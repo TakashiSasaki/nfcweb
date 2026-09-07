@@ -92,10 +92,10 @@ function SchemaPropertyTable({
         <table className="w-full text-left text-[11px] border-collapse">
           <thead>
             <tr className="bg-slate-800/80 text-slate-300 border-b border-slate-700">
-              <th className="p-2 font-mono">フィールド名</th>
-              <th className="p-2 font-mono">型 / 定数</th>
-              <th className="p-2">必須</th>
-              <th className="p-2">説明 / 制約</th>
+              <th className="p-2 font-mono">Field Name</th>
+              <th className="p-2 font-mono">Type / Constant</th>
+              <th className="p-2">Required</th>
+              <th className="p-2">Description / Constraints</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800 text-slate-300">
@@ -106,10 +106,10 @@ function SchemaPropertyTable({
                 <td className="p-2">
                   {p.isRequired ? (
                     <span className="text-emerald-400 font-bold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30 text-[10px]">
-                      必須
+                      Required
                     </span>
                   ) : (
-                    <span className="text-slate-500 text-[10px]">任意</span>
+                    <span className="text-slate-500 text-[10px]">Optional</span>
                   )}
                 </td>
                 <td className="p-2 space-y-1">
@@ -125,7 +125,7 @@ function SchemaPropertyTable({
                   )}
                   {p.example && (
                     <div className="text-[10px] text-slate-400 font-mono">
-                      例: <code className="text-slate-300">{p.example}</code>
+                      Example: <code className="text-slate-300">{p.example}</code>
                     </div>
                   )}
                 </td>
@@ -175,20 +175,20 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
         {/* Header Badges & Provenance Info */}
         <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-900/80 rounded-xl border border-slate-800 text-xs">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-400">フォーマット:</span>
+            <span className="font-semibold text-slate-400">Format:</span>
             <span className="font-mono text-cyan-300 font-bold bg-cyan-950/70 px-2 py-0.5 rounded border border-cyan-500/30">
               {CANONICAL_FORMAT}
             </span>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-slate-400">スキーマ版数:</span>
+              <span className="font-semibold text-slate-400">Schema Version:</span>
               <span className="font-mono text-emerald-300 font-bold bg-emerald-950/70 px-2 py-0.5 rounded border border-emerald-500/30">
                 v{CANONICAL_SCHEMA_VERSION}
               </span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-slate-400">規格:</span>
+              <span className="font-semibold text-slate-400">Standard:</span>
               <span className="font-mono text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded">
                 Draft 2020-12 (SSOT)
               </span>
@@ -208,7 +208,7 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
             }`}
           >
             <BookOpen className="w-3.5 h-3.5" />
-            <span>スキーマ導出リファレンス</span>
+            <span>Schema Reference</span>
           </button>
 
           <button
@@ -221,7 +221,7 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
             }`}
           >
             <FileCode className="w-3.5 h-3.5" />
-            <span>JSON Schema (厳格定義)</span>
+            <span>JSON Schema</span>
           </button>
 
           <button
@@ -234,7 +234,7 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
             }`}
           >
             <FileJson className="w-3.5 h-3.5" />
-            <span>サンプルデータ (v1)</span>
+            <span>Example Document (v1)</span>
           </button>
         </div>
 
@@ -245,24 +245,24 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
             <div className="p-3 bg-blue-950/40 border border-blue-500/30 rounded-xl space-y-1.5">
               <div className="font-bold text-blue-300 flex items-center gap-1.5">
                 <Info className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                <span>スキーマ単一情報源 (SSOT) & 互換性原則</span>
+                <span>Single Source of Truth (SSOT) & Compatibility</span>
               </div>
               <p className="text-slate-300 leading-relaxed text-[11px]">
-                本仕様表は <code>nfcweb-tag-registry.schema.json</code> (Draft 2020-12) から自動抽出・描画されています。
-                <code>schemaVersion</code> はデータ契約の確定バージョンを示し、<code>additionalProperties: false</code> により厳格なスキーマ検証が行われます。
+                This specification is automatically extracted and rendered from <code>nfcweb-tag-registry.schema.json</code> (Draft 2020-12).
+                The <code>schemaVersion</code> denotes the contract version, with strict validation enforced by <code>additionalProperties: false</code>.
               </p>
             </div>
 
             {/* Top-Level Document Structure */}
             <SchemaPropertyTable
-              title="トップレベル・ドキュメント構造 (Root Document)"
+              title="Root Document Structure"
               dotColor="bg-cyan-400"
               properties={rootProperties}
             />
 
             {/* Tag Item Structure */}
             <SchemaPropertyTable
-              title="NFCタグ登録データ構造 (ExportableTagV1)"
+              title="Tag Item Structure (ExportableTagV1)"
               dotColor="bg-emerald-400"
               properties={tagProperties}
             />
@@ -271,29 +271,29 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
             <div className="space-y-3 pt-2">
               <h4 className="font-bold text-slate-200 flex items-center gap-1.5 text-xs border-b border-slate-700/60 pb-1">
                 <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                <span>NDEFレコード型別仕様 ($defs / oneOf)</span>
+                <span>NDEF Record Types ($defs / oneOf)</span>
               </h4>
               
               <SchemaPropertyTable
-                title="1. テキストレコード (TextRecord: recordType='text')"
+                title="1. Text Record (TextRecord: recordType='text')"
                 dotColor="bg-sky-400"
                 properties={textRecordProperties}
               />
 
               <SchemaPropertyTable
-                title="2. URLレコード (UrlRecord: recordType='url')"
+                title="2. URL Record (UrlRecord: recordType='url')"
                 dotColor="bg-teal-400"
                 properties={urlRecordProperties}
               />
 
               <SchemaPropertyTable
-                title="3. MIMEレコード (MimeRecord: recordType='mime')"
+                title="3. MIME Record (MimeRecord: recordType='mime')"
                 dotColor="bg-amber-400"
                 properties={mimeRecordProperties}
               />
 
               <SchemaPropertyTable
-                title="4. 空レコード (EmptyRecord: recordType='empty')"
+                title="4. Empty Record (EmptyRecord: recordType='empty')"
                 dotColor="bg-slate-400"
                 properties={emptyRecordProperties}
               />
@@ -315,7 +315,7 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
                   className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-colors cursor-pointer"
                 >
                   {copiedSection === 'schema' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
-                  <span>{copiedSection === 'schema' ? 'コピー完了' : 'スキーマをコピー'}</span>
+                  <span>{copiedSection === 'schema' ? 'Copied' : 'Copy Schema'}</span>
                 </button>
                 <button
                   type="button"
@@ -323,7 +323,7 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
                   className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-950 hover:bg-cyan-900 text-cyan-300 text-xs font-semibold border border-cyan-500/40 transition-colors cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>.schema.json 保存</span>
+                  <span>Download .schema.json</span>
                 </button>
               </div>
             </div>
@@ -347,7 +347,7 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
                   className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-colors cursor-pointer"
                 >
                   {copiedSection === 'example' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
-                  <span>{copiedSection === 'example' ? 'コピー完了' : 'サンプルをコピー'}</span>
+                  <span>{copiedSection === 'example' ? 'Copied' : 'Copy Example'}</span>
                 </button>
                 <button
                   type="button"
@@ -355,7 +355,7 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
                   className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-semibold border border-emerald-500/40 transition-colors cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>.json 保存</span>
+                  <span>Download .json</span>
                 </button>
               </div>
             </div>
@@ -372,7 +372,7 @@ export function DataSchemaModal({ isOpen, onClose }: DataSchemaModalProps) {
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors border border-slate-700 cursor-pointer"
           >
-            閉じる
+            Close
           </button>
         </div>
 

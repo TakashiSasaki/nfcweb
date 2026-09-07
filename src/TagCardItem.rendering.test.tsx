@@ -218,5 +218,35 @@ describe('TagCardItem Component Rendering & Interaction Tests', () => {
       fireEvent.keyDown(document, { key: 'Escape' });
       expect(screen.queryByTestId('tag-overflow-menu')).toBeNull();
     });
+
+    it('renders Add photo option in overflow menu when no photo is attached', () => {
+      render(<TagCardItem {...defaultProps} />);
+
+      const menuButton = screen.getByTestId('tag-overflow-menu-button');
+      fireEvent.click(menuButton);
+
+      expect(screen.getByRole('menuitem', { name: /Add photo/i })).not.toBeNull();
+    });
+
+    it('renders Change photo and Remove photo options in overflow menu when photo is attached', () => {
+      const onUpdatePhoto = vi.fn();
+      render(
+        <TagCardItem 
+          {...defaultProps} 
+          onUpdatePhoto={onUpdatePhoto}
+          tag={{ ...baseTag, photoUrl: 'https://example.com/asset.jpg' }} 
+        />
+      );
+
+      const menuButton = screen.getByTestId('tag-overflow-menu-button');
+      fireEvent.click(menuButton);
+
+      expect(screen.getByRole('menuitem', { name: /Change photo/i })).not.toBeNull();
+      const removeBtn = screen.getByRole('menuitem', { name: /Remove photo/i });
+      expect(removeBtn).not.toBeNull();
+
+      fireEvent.click(removeBtn);
+      expect(onUpdatePhoto).toHaveBeenCalledWith(baseTag.uid, undefined, undefined);
+    });
   });
 });

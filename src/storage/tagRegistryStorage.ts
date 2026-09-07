@@ -69,8 +69,8 @@ export function saveTagRegistry(tags: readonly NFCTagItem[]): StorageOperationRe
   } catch (err: any) {
     console.error('Failed to persist tag registry to localStorage:', err);
     const message = err?.name === 'QuotaExceededError'
-      ? 'ブラウザのローカルストレージ容量上限 (QuotaExceededError) を超過しました。'
-      : (err?.message || 'ローカルストレージへの書き込みに失敗しました。');
+      ? 'Storage quota exceeded (QuotaExceededError). Please free up local space.'
+      : (err?.message || 'Failed to persist tag registry to local storage.');
     return { success: false, error: message };
   }
 }

@@ -47,7 +47,7 @@ export function validateImportPayload(input: unknown): ImportValidationResult {
   if (input === null || input === undefined) {
     return {
       ok: false,
-      errors: [{ path: '#', message: 'インポートデータが空または未定義です。' }]
+      errors: [{ path: '#', message: 'Import data is empty or undefined.' }]
     };
   }
 
@@ -57,8 +57,8 @@ export function validateImportPayload(input: unknown): ImportValidationResult {
       errors: [{
         path: '#',
         message: Array.isArray(input)
-          ? 'レガシー形式のプレーンなタグ配列は非対応です。正規の { format, schemaVersion, tags, ... } オブジェクトを指定してください。'
-          : 'インポートデータは正規のJSONオブジェクトである必要があります。'
+          ? 'Legacy plain tag array is not supported. Please provide a canonical { format, schemaVersion, tags, ... } object.'
+          : 'Import data must be a valid JSON object.'
       }]
     };
   }
@@ -69,14 +69,14 @@ export function validateImportPayload(input: unknown): ImportValidationResult {
   if (!('format' in recordObj)) {
     return {
       ok: false,
-      errors: [{ path: '/format', message: `必須プロパティ 'format' がありません。"${CANONICAL_FORMAT}" を指定してください。` }]
+      errors: [{ path: '/format', message: `Missing required property 'format'. Expected "${CANONICAL_FORMAT}".` }]
     };
   }
 
   if (recordObj.format !== CANONICAL_FORMAT) {
     return {
       ok: false,
-      errors: [{ path: '/format', message: `未対応のフォーマット識別子 "${String(recordObj.format)}" です。"${CANONICAL_FORMAT}" を指定してください。` }]
+      errors: [{ path: '/format', message: `Unsupported format identifier "${String(recordObj.format)}". Expected "${CANONICAL_FORMAT}".` }]
     };
   }
 
@@ -84,7 +84,7 @@ export function validateImportPayload(input: unknown): ImportValidationResult {
   if (!('schemaVersion' in recordObj)) {
     return {
       ok: false,
-      errors: [{ path: '/schemaVersion', message: `必須プロパティ 'schemaVersion' がありません。${CANONICAL_SCHEMA_VERSION} を指定してください。` }]
+      errors: [{ path: '/schemaVersion', message: `Missing required property 'schemaVersion'. Expected ${CANONICAL_SCHEMA_VERSION}.` }]
     };
   }
 
@@ -93,7 +93,7 @@ export function validateImportPayload(input: unknown): ImportValidationResult {
       ok: false,
       errors: [{
         path: '/schemaVersion',
-        message: `未対応の将来のスキーマバージョン (${recordObj.schemaVersion}) です。本バージョンのNFCWebはスキーマ v${CANONICAL_SCHEMA_VERSION} にのみ対応しています。アプリケーションを更新してください。`
+        message: `Unsupported future schema version (${recordObj.schemaVersion}). This version of NFCWeb only supports schema v${CANONICAL_SCHEMA_VERSION}. Please update the application.`
       }]
     };
   }
@@ -103,7 +103,7 @@ export function validateImportPayload(input: unknown): ImportValidationResult {
       ok: false,
       errors: [{
         path: '/schemaVersion',
-        message: `無効なスキーマバージョン (${String(recordObj.schemaVersion)}) です。v${CANONICAL_SCHEMA_VERSION} を指定してください。`
+        message: `Invalid schema version (${String(recordObj.schemaVersion)}). Expected v${CANONICAL_SCHEMA_VERSION}.`
       }]
     };
   }
@@ -117,7 +117,7 @@ export function validateImportPayload(input: unknown): ImportValidationResult {
         : '#';
       return {
         path: path.startsWith('/') ? path : `/${path}`,
-        message: err.message ? `${err.message}${err.params ? ` (${JSON.stringify(err.params)})` : ''}` : 'スキーマ検証エラー',
+        message: err.message ? `${err.message}${err.params ? ` (${JSON.stringify(err.params)})` : ''}` : 'Schema validation error',
         keyword: err.keyword
       };
     });
@@ -141,7 +141,7 @@ export function validateImportPayload(input: unknown): ImportValidationResult {
     if (!isValidCanonicalUid(canonical) || canonical !== tag.uid) {
       semanticErrors.push({
         path: `/tags/${idx}/uid`,
-        message: `タグ (index ${idx}) のUID "${tag.uid}" は正準フォーマット (小文字16進数・偶数桁・区切り文字なし) に違反しています。`
+        message: `Tag (index ${idx}) UID "${tag.uid}" violates canonical format (lowercase hexadecimal, even length 8-32, no separators).`
       });
       continue;
     }
@@ -151,7 +151,7 @@ export function validateImportPayload(input: unknown): ImportValidationResult {
       const priorIdx = seenUids.get(canonical)!;
       semanticErrors.push({
         path: `/tags/${idx}/uid`,
-        message: `UID重複エラー: UID "${canonical}" がインポートファイル内で複数回出現しています (index ${priorIdx} および index ${idx})。1ファイル内でのUID重複は禁止されています。`
+        message: `Duplicate UID error: UID "${canonical}" appears multiple times in import file (index ${priorIdx} and index ${idx}). Duplicate UIDs are prohibited.`
       });
     } else {
       seenUids.set(canonical, idx);
@@ -162,7 +162,7 @@ export function validateImportPayload(input: unknown): ImportValidationResult {
       if (tag.firstSeen > tag.lastRead) {
         semanticErrors.push({
           path: `/tags/${idx}/firstSeen`,
-          message: `タイムスタンプ整合性エラー: 初回検出日時 firstSeen (${tag.firstSeen}) は最終読込日時 lastRead (${tag.lastRead}) 以下である必要があります。`
+          message: `Timestamp consistency error: firstSeen (${tag.firstSeen}) must be less than or equal to lastRead (${tag.lastRead}).`
         });
       }
     }

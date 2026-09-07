@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { NFCLog, NFCSettings, NFCTagItem, EditableNDEFRecord } from './types';
 import { normalizeUid, canonicalizeUid, isValidCanonicalUid } from './domain/uid';
 import { loadTagRegistry, saveTagRegistry, clearTagRegistry, commitTagRegistry } from './storage/tagRegistryStorage';
+import { deletePhotoAsset, deletePhotoAssets } from './storage/photoAssetStorage';
 
 export { normalizeUid, canonicalizeUid, isValidCanonicalUid };
 
@@ -91,27 +92,27 @@ export function analyzeNTAGCapacity(bytesOrRecords: number | EditableNDEFRecord[
   if (bytes === 0) {
     badgeLabel = '0 B (Empty)';
     badgeColor = 'emerald';
-    detailDescription = '空データ (0 Bytes) - すべてのNTAGで書き込み可能';
+    detailDescription = 'Empty data (0 Bytes) - writable to all NTAG chips';
   } else if (fitsNTAG213) {
     recommendedChip = 'NTAG213';
     badgeLabel = `${bytes}B (NTAG213 OK)`;
     badgeColor = 'emerald';
-    detailDescription = `NTAG213 / 215 / 216 すべて書き込み可能 (${bytes} / 144 B)`;
+    detailDescription = `Fits NTAG213 / 215 / 216 (${bytes} / 144 B)`;
   } else if (fitsNTAG215) {
     recommendedChip = 'NTAG215';
-    badgeLabel = `${bytes}B (NTAG215 要)`;
+    badgeLabel = `${bytes}B (NTAG215 Req)`;
     badgeColor = 'amber';
-    detailDescription = `144B超過: NTAG215 (504B) または NTAG216 が必要 (${bytes} / 504 B)`;
+    detailDescription = `Exceeds 144B: Requires NTAG215 (504B) or NTAG216 (${bytes} / 504 B)`;
   } else if (fitsNTAG216) {
     recommendedChip = 'NTAG216';
-    badgeLabel = `${bytes}B (NTAG216 要)`;
+    badgeLabel = `${bytes}B (NTAG216 Req)`;
     badgeColor = 'blue';
-    detailDescription = `504B超過: NTAG216 (888B) が必要 (${bytes} / 888 B)`;
+    detailDescription = `Exceeds 504B: Requires NTAG216 (888B) (${bytes} / 888 B)`;
   } else {
     recommendedChip = 'OVER_LIMIT';
-    badgeLabel = `${bytes}B (888B 超過)`;
+    badgeLabel = `${bytes}B (888B Exceeded)`;
     badgeColor = 'red';
-    detailDescription = `888B超過 (${bytes} B): 一般的なNTAG216の容量を超えています`;
+    detailDescription = `Exceeds 888B (${bytes} B): Exceeds standard NTAG216 capacity`;
   }
 
   return {
@@ -153,7 +154,7 @@ export function parseRawNDEFToEditable(records: any[]): EditableNDEFRecord[] {
       if (recordType === 'text') {
         const textDecoder = new TextDecoder(record.encoding || 'utf-8');
         const text = textDecoder.decode(record.data);
-        return { id, recordType: 'text', data: text, lang: record.lang || 'ja' };
+        return { id, recordType: 'text', data: text, lang: record.lang || 'en' };
       }
       if (recordType === 'url') {
         const textDecoder = new TextDecoder();
@@ -193,7 +194,7 @@ export function formatNDEFPayloadForNFC(records: EditableNDEFRecord[]) {
         return {
           recordType: 'text',
           data: r.data || '',
-          lang: r.lang || 'ja',
+          lang: r.lang || 'en',
           encoding: 'utf-8'
         };
       }
@@ -213,7 +214,7 @@ export function formatNDEFPayloadForNFC(records: EditableNDEFRecord[]) {
       return {
         recordType: 'text',
         data: r.data || '',
-        lang: 'ja'
+        lang: 'en'
       };
     })
   };
@@ -238,7 +239,7 @@ export const SAMPLE_NDEF_TEMPLATES: SampleTagTemplate[] = [
     description: 'URL Portal + Asset Name Text + Hardware Spec JSON MIME',
     records: [
       { id: 'rec-1', recordType: 'url', data: 'https://asset.enterprise.io/device/mac-0489' },
-      { id: 'rec-2', recordType: 'text', data: 'MacBook Pro 16" M3 Max (IT-Asset-8492)', lang: 'ja' },
+      { id: 'rec-2', recordType: 'text', data: 'MacBook Pro 16" M3 Max (IT-Asset-8492)', lang: 'en' },
       { id: 'rec-3', recordType: 'mime', mediaType: 'application/json', data: '{"owner":"Takashi","dept":"Engineering","status":"active","warrantyExp":"2027-12"}' }
     ]
   },
@@ -247,10 +248,10 @@ export const SAMPLE_NDEF_TEMPLATES: SampleTagTemplate[] = [
     name: 'Bilingual Information Sign (Multi 2-Rec)',
     category: 'multi',
     badge: '2 Records',
-    description: 'Japanese Room Description + English Room Description',
+    description: 'Primary Room Description + Secondary Room Description',
     records: [
-      { id: 'rec-1', recordType: 'text', data: '第1会議室（定員12名・4Kプロジェクター完備）', lang: 'ja' },
-      { id: 'rec-2', recordType: 'text', data: 'Conference Room 1 (Cap: 12, 4K Projector)', lang: 'en' }
+      { id: 'rec-1', recordType: 'text', data: 'Conference Room 1 (Cap: 12, 4K Projector)', lang: 'en' },
+      { id: 'rec-2', recordType: 'text', data: 'Executive Boardroom East (Screen & Polycom)', lang: 'en' }
     ]
   },
   {
@@ -271,7 +272,7 @@ export const SAMPLE_NDEF_TEMPLATES: SampleTagTemplate[] = [
     badge: '3 Records',
     description: 'Shelf Location + WMS Deep Link + Zone Config JSON',
     records: [
-      { id: 'rec-1', recordType: 'text', data: 'Logistics Bay #07 / Rack 3-B', lang: 'ja' },
+      { id: 'rec-1', recordType: 'text', data: 'Logistics Bay #07 / Rack 3-B', lang: 'en' },
       { id: 'rec-2', recordType: 'url', data: 'https://wms.logistics.io/shelf/07-3B' },
       { id: 'rec-3', recordType: 'mime', mediaType: 'application/json', data: '{"zone":"Cold-A","targetTemp":-20,"skuCount":48}' }
     ]
@@ -304,7 +305,7 @@ export const SAMPLE_NDEF_TEMPLATES: SampleTagTemplate[] = [
     badge: '1 Record',
     description: 'Simple Plain Text Message',
     records: [
-      { id: 'rec-1', recordType: 'text', data: 'Hello from Web NFC Tag!', lang: 'ja' }
+      { id: 'rec-1', recordType: 'text', data: 'Hello from Web NFC Tag!', lang: 'en' }
     ]
   }
 ];
@@ -424,15 +425,55 @@ export function useAppStore() {
     setTags(prev => prev.map(t => canonicalizeUid(t.uid) === canon ? { ...t, notes } : t));
   }, []);
 
+  const updateTagPhoto = useCallback(async (uid: string, photoAssetId?: string, photoUrl?: string) => {
+    const canon = canonicalizeUid(uid);
+    let oldAssetIdToDelete: string | undefined;
+
+    setTags(prev => prev.map(t => {
+      if (canonicalizeUid(t.uid) === canon) {
+        if (t.photoAssetId && t.photoAssetId !== photoAssetId) {
+          oldAssetIdToDelete = t.photoAssetId;
+        }
+        return {
+          ...t,
+          photoAssetId: photoAssetId || undefined,
+          photoUrl: photoUrl !== undefined ? photoUrl : t.photoUrl
+        };
+      }
+      return t;
+    }));
+
+    if (oldAssetIdToDelete) {
+      await deletePhotoAsset(oldAssetIdToDelete).catch(err => {
+        console.warn('Failed to clean up old photo asset:', err);
+      });
+    }
+  }, []);
+
   const deleteTag = useCallback((uid: string) => {
     const canon = canonicalizeUid(uid);
-    setTags(prev => prev.filter(t => canonicalizeUid(t.uid) !== canon));
+    setTags(prev => {
+      const target = prev.find(t => canonicalizeUid(t.uid) === canon);
+      if (target?.photoAssetId) {
+        deletePhotoAsset(target.photoAssetId).catch(err => {
+          console.warn('Failed to clean up deleted tag photo asset:', err);
+        });
+      }
+      return prev.filter(t => canonicalizeUid(t.uid) !== canon);
+    });
   }, []);
 
   const clearAllTags = useCallback(() => {
+    // Delete all associated photo assets from IndexedDB
+    const assetIds = tags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id));
+    if (assetIds.length > 0) {
+      deletePhotoAssets(assetIds).catch(err => {
+        console.warn('Failed to clean up photo assets on clearAllTags:', err);
+      });
+    }
     clearTagRegistry();
     setTags([]);
-  }, []);
+  }, [tags]);
 
   const importTagsRegistry = useCallback((newTags: NFCTagItem[]): { success: boolean; error?: string } => {
     return commitTagRegistry(newTags, (persistedTags) => {
@@ -456,7 +497,16 @@ export function useAppStore() {
   };
 
   const clearSampleTags = useCallback(() => {
-    setTags(prev => prev.filter(t => !isLegacyOrTaggedSample(t)));
+    setTags(prev => {
+      const sampleTags = prev.filter(isLegacyOrTaggedSample);
+      const sampleAssetIds = sampleTags.map(t => t.photoAssetId).filter((id): id is string => Boolean(id));
+      if (sampleAssetIds.length > 0) {
+        deletePhotoAssets(sampleAssetIds).catch(err => {
+          console.warn('Failed to clean up sample photo assets:', err);
+        });
+      }
+      return prev.filter(t => !isLegacyOrTaggedSample(t));
+    });
   }, []);
 
   // Developer utility to seed mock tags for stress-testing and multi-record validation
@@ -471,7 +521,7 @@ export function useAppStore() {
         tagType: 'NTAG215 (504B)',
         records: (i: number): EditableNDEFRecord[] => [
           { id: `rec-url-${i}`, recordType: 'url', data: `https://asset.enterprise.io/device/${1000 + i}` },
-          { id: `rec-txt-${i}`, recordType: 'text', data: `MacBook Pro 16" M3 Max [Dept-Dev-${(i % 5) + 1}]`, lang: 'ja' },
+          { id: `rec-txt-${i}`, recordType: 'text', data: `MacBook Pro 16" M3 Max [Dept-Dev-${(i % 5) + 1}]`, lang: 'en' },
           { id: `rec-mim-${i}`, recordType: 'mime', mediaType: 'application/json', data: `{"assetId":"AP-${10000 + i}","assignedTo":"User_${(i % 10) + 1}","status":"active"}` }
         ]
       },
@@ -480,8 +530,8 @@ export function useAppStore() {
         name: 'Conference Room Smart Sign',
         tagType: 'NTAG213 / MIFARE Ultralight (7-byte UID)',
         records: (i: number): EditableNDEFRecord[] => [
-          { id: `rec-ja-${i}`, recordType: 'text', data: `第${(i % 8) + 1}会議室（定員10名・大型ディスプレイ完備）`, lang: 'ja' },
-          { id: `rec-en-${i}`, recordType: 'text', data: `Conference Room ${(i % 8) + 1} (Capacity: 10, 4K Display)`, lang: 'en' }
+          { id: `rec-ja-${i}`, recordType: 'text', data: `Conference Room ${(i % 8) + 1} (Capacity: 10, 4K Display)`, lang: 'en' },
+          { id: `rec-en-${i}`, recordType: 'text', data: `Executive Room ${(i % 8) + 1} (Video Conferencing)`, lang: 'en' }
         ]
       },
       // 3. Digital Business Card / vCard (2 Records)
@@ -498,7 +548,7 @@ export function useAppStore() {
         name: 'Warehouse Shelf Tag',
         tagType: 'NTAG215 (504B)',
         records: (i: number): EditableNDEFRecord[] => [
-          { id: `rec-loc-${i}`, recordType: 'text', data: `Warehouse Bay #0${(i % 9) + 1} / Shelf ${String.fromCharCode(65 + (i % 6))}`, lang: 'ja' },
+          { id: `rec-loc-${i}`, recordType: 'text', data: `Warehouse Bay #0${(i % 9) + 1} / Shelf ${String.fromCharCode(65 + (i % 6))}`, lang: 'en' },
           { id: `rec-url-${i}`, recordType: 'url', data: `https://wms.logistics.io/bay/0${(i % 9) + 1}-${String.fromCharCode(65 + (i % 6))}` },
           { id: `rec-mim-${i}`, recordType: 'mime', mediaType: 'application/json', data: `{"rackId":"RK-${i + 1}","tempZone":"ambient","maxCapacity":120}` }
         ]
@@ -732,6 +782,7 @@ export function useAppStore() {
     upsertTag,
     updateTagName,
     updateTagNotes,
+    updateTagPhoto,
     deleteTag,
     clearAllTags,
     importTagsRegistry,

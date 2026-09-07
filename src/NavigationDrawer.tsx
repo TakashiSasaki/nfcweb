@@ -104,7 +104,7 @@ export function NavigationDrawer({
                     {APP_VERSION_TAG}
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 font-medium">メニュー & ナビゲーション</p>
+                <p className="text-xs text-slate-400 font-medium">Menu & Navigation</p>
               </div>
             </div>
 
@@ -113,7 +113,7 @@ export function NavigationDrawer({
               onClick={onClose}
               className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 shadow-sm transition-colors cursor-pointer flex-shrink-0"
               aria-label="Close navigation menu"
-              title="メニューを閉じる"
+              title="Close Menu"
             >
               <X className="w-5 h-5 text-slate-300 hover:text-white transition-colors" />
             </button>
@@ -210,7 +210,7 @@ export function NavigationDrawer({
                   <div className="truncate text-white font-medium">
                     Export
                   </div>
-                  <p className="text-[10px] text-slate-400 truncate">タグ台帳の出力 (Canonical v1 JSON)</p>
+                  <p className="text-[10px] text-slate-400 truncate">Export Registry (Canonical v1 JSON)</p>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 flex-shrink-0" />
@@ -233,7 +233,7 @@ export function NavigationDrawer({
                   <div className="truncate text-white font-medium">
                     Import
                   </div>
-                  <p className="text-[10px] text-slate-400 truncate">バックアップ復元 (マージ / 置換)</p>
+                  <p className="text-[10px] text-slate-400 truncate">Restore backup (Merge / Replace)</p>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 flex-shrink-0" />
@@ -256,7 +256,7 @@ export function NavigationDrawer({
                   <div className="truncate text-white font-medium">
                     Data Schema
                   </div>
-                  <p className="text-[10px] text-slate-400 truncate">JSON Schema (Draft 2020-12) 仕様書</p>
+                  <p className="text-[10px] text-slate-400 truncate">JSON Schema (Draft 2020-12) Spec</p>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 flex-shrink-0" />
@@ -284,9 +284,9 @@ export function NavigationDrawer({
                 </div>
                 <div className="text-left min-w-0">
                   <div className="truncate text-white font-medium">
-                    アプリ共有 QRコード
+                    Share App (QR)
                   </div>
-                  <p className="text-[10px] text-slate-400 truncate">他デバイスへURLを共有</p>
+                  <p className="text-[10px] text-slate-400 truncate">Share URL with other devices</p>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 flex-shrink-0" />
@@ -308,9 +308,9 @@ export function NavigationDrawer({
                   </div>
                   <div className="text-left min-w-0">
                     <div className="truncate text-white font-medium">
-                      サンプルタグ生成
+                      Generate Sample Tags
                     </div>
-                    <p className="text-[10px] text-slate-400 truncate">テスト用タグ20件を登録</p>
+                    <p className="text-[10px] text-slate-400 truncate">Populate 20 demo tags</p>
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 flex-shrink-0" />
@@ -323,7 +323,7 @@ export function NavigationDrawer({
             <div className="text-[11px] font-bold text-slate-300 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
-                <span>端末 & ストレージ状態</span>
+                <span>Device & Storage Status</span>
               </span>
               <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold ${
                 isScanning ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400'
@@ -333,11 +333,11 @@ export function NavigationDrawer({
             </div>
             <div className="text-xs text-slate-400 space-y-1">
               <div className="flex justify-between">
-                <span>登録タグ数:</span>
-                <span className="font-mono text-slate-200 font-semibold">{tagsCount} 件</span>
+                <span>Registered Tags:</span>
+                <span className="font-mono text-slate-200 font-semibold">{tagsCount} tags</span>
               </div>
               <div className="flex justify-between">
-                <span>UID保護ロック:</span>
+                <span>UID Protection:</span>
                 <span className="text-emerald-400 font-medium">Enabled</span>
               </div>
             </div>
@@ -354,7 +354,7 @@ export function NavigationDrawer({
             <span className="font-mono text-[11px] text-cyan-300">{APP_VERSION_TAG}</span>
           </div>
           <p className="text-[10px] text-slate-500 leading-relaxed">
-            左上のメニューボタンからいつでもこのメニューを開閉できます。
+            Open or close this navigation menu anytime using the top-left menu icon.
           </p>
         </div>
       </div>

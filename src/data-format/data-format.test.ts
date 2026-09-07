@@ -177,7 +177,7 @@ describe('Decisive Rejection of Non-Canonical & Legacy Formats', () => {
 
     const res = validateImportPayload(rawArray);
     expect(res.ok).toBe(false);
-    expect(res.errors?.[0].message).toContain('プレーンなタグ配列');
+    expect(res.errors?.[0].message).toContain('Legacy plain tag array is not supported');
   });
 
   it('rejects unrecognized format identifier', () => {
@@ -187,7 +187,7 @@ describe('Decisive Rejection of Non-Canonical & Legacy Formats', () => {
     };
     const res = validateImportPayload(badFormat);
     expect(res.ok).toBe(false);
-    expect(res.errors?.[0].message).toContain('未対応のフォーマット識別子');
+    expect(res.errors?.[0].message).toContain('Unsupported format identifier');
   });
 
   it('rejects future or non-v1 schemaVersion', () => {
@@ -197,7 +197,7 @@ describe('Decisive Rejection of Non-Canonical & Legacy Formats', () => {
     };
     const res = validateImportPayload(futureDoc);
     expect(res.ok).toBe(false);
-    expect(res.errors?.[0].message).toContain('未対応の将来のスキーマバージョン');
+    expect(res.errors?.[0].message).toContain('Unsupported future schema version');
   });
 
   it('rejects uncanonical UIDs (e.g. with colons or uppercase) in strict canonical import', () => {
@@ -240,7 +240,7 @@ describe('Decisive Rejection of Non-Canonical & Legacy Formats', () => {
     };
     const res = validateImportPayload(dupDoc);
     expect(res.ok).toBe(false);
-    expect(res.errors?.[0].message).toContain('UID重複エラー');
+    expect(res.errors?.[0].message).toContain('Duplicate UID error');
   });
 
   it('rejects unknown additional properties', () => {
