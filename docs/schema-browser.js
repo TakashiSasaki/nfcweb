@@ -59,8 +59,10 @@ try {
       overview.append(card);
     }
     const canonicalCount = schemas.filter(s => s.status !== 'proposed').length;
-    const proposedCount = schemas.filter(s => s.status === 'proposed').length;
-    status.textContent = `${canonicalCount} canonical schemas · ${proposedCount} proposed schemas`;
+    const proposed = schemas.filter(s => s.status === 'proposed');
+    const designVersions = [...new Set(proposed.map(s => s.designVersion).filter(Boolean))];
+    const proposedLabel = designVersions.length === 1 ? `${proposed.length} proposed schemas (${designVersions[0]})` : `${proposed.length} proposed schemas`;
+    status.textContent = `${canonicalCount} canonical schemas · ${proposedLabel}`;
   } else {
     const id = new URL(location.href).searchParams.get('id');
     const schema = schemas.find(s => s.id === id);
