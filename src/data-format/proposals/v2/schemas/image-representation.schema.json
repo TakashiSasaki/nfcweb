@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nfcweb.ai.studio/schemas/image-representation/v1",
+  "title": "ImageRepresentationV1",
+  "description": "Proposed concrete encoding of an ImageAssetV1, such as an original, display-sized image, or thumbnail. This schema is not yet canonical.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["role", "mediaType", "content"],
+  "properties": {
+    "role": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Application-defined representation role such as original, display, or thumbnail."
+    },
+    "mediaType": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Media type of the encoded byte sequence, for example image/jpeg, image/png, or image/webp."
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Pixel width when known."
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Pixel height when known."
+    },
+    "content": {
+      "$ref": "https://nfcweb.ai.studio/schemas/byte-sequence/v1"
+    }
+  }
+}
