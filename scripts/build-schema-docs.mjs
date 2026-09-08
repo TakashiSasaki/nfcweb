@@ -11,6 +11,7 @@ export function manifestEntry(schema, filename, options = {}) {
   const status = options.status || 'canonical';
   const json = options.json || `schemas/source/${encodeURIComponent(filename)}`;
   return {id: uri.href, title: schema.title, family: parts.at(-2), version: parts.at(-1), status,
+    ...(options.designVersion ? {designVersion: options.designVersion} : {}),
     description: schema.description || '', json,
     refs: [...new Set(jsonLines(schema).filter(row => row.ref !== undefined).map(row => new URL(row.ref, row.scope).href))]};
 }
@@ -34,6 +35,7 @@ export async function build(root = process.cwd()) {
   if (!canonical.files.length) throw Error('No canonical schemas');
   const proposed = await readSchemaSet(proposedV2Source, file => ({
     status: 'proposed',
+    designVersion: 'v2-alpha.1',
     json: `schemas/proposed/v2-alpha.1/${encodeURIComponent(file)}`
   }));
   const schemas = [...canonical.schemas, ...proposed.schemas];
