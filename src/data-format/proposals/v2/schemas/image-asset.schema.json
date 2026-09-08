@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nfcweb.ai.studio/schemas/image-asset/v1",
+  "title": "ImageAssetV1",
+  "description": "Proposed logical image asset independent of any one encoded representation. This schema is not yet canonical.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "representations"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Registry-local identifier referenced by TagPhotoV1.assetId."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional description of the logical image independent of any particular encoding."
+    },
+    "representations": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Encoded forms of the same logical image, for example original, display, or thumbnail representations.",
+      "items": {
+        "$ref": "https://nfcweb.ai.studio/schemas/image-representation/v1"
+      }
+    }
+  }
+}
