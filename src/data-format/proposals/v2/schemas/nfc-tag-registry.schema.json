@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nfcweb.ai.studio/schemas/nfc-tag-registry/v2",
+  "title": "NfcTagRegistryV2",
+  "description": "Proposed v2 interchange registry containing NFC tags and reusable image assets. This schema is a design proposal and is not yet canonical.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "schemaVersion", "exportedAt", "appVersion", "tags", "assets"],
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "nfcweb-tag-registry"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "const": 2
+    },
+    "exportedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "appVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "$ref": "https://nfcweb.ai.studio/schemas/nfc-tag/v2"
+      }
+    },
+    "assets": {
+      "type": "array",
+      "description": "Logical image assets referenced by tag photo associations.",
+      "items": {
+        "$ref": "https://nfcweb.ai.studio/schemas/image-asset/v1"
+      }
+    }
+  }
+}
