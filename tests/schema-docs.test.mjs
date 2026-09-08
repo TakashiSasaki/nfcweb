@@ -115,7 +115,7 @@ test('artifact includes canonical and proposed schemas byte-for-byte with unchan
       assert.equal(url.searchParams.get('id'), entry.id);
     }
   }
-  assert.deepEqual((await readdir('_site')).sort(), ['.nojekyll','index.html','schema-browser.js','schema-core.js','schema-manifest.json','schema.css','schema.html','schemas','source-browser.js','source.html'].sort());
+  assert.deepEqual((await readdir('_site')).sort(), ['.nojekyll','index.html','schema-browser.js','schema-core.js','schema-manifest.json','schema.css','schema.html','schemas','service-worker-register.js','service-worker.js','source-browser.js','source.html'].sort());
 });
 test('overview and schema viewer expose source navigation; source viewer exposes provenance and status', async () => {
   const schemaBrowser = await readFile('docs/schema-browser.js', 'utf8');
@@ -127,6 +127,21 @@ test('overview and schema viewer expose source navigation; source viewer exposes
   assert.match(sourceBrowser, /designVersion/);
   assert.match(sourceBrowser, /View schema/);
   assert.match(sourceBrowser, /View raw JSON/);
+});
+test('Pages service worker is registered site-wide and keeps network ahead of runtime cache', async () => {
+  const registration = await readFile('docs/service-worker-register.js', 'utf8');
+  const worker = await readFile('docs/service-worker.js', 'utf8');
+  const schemaBrowser = await readFile('docs/schema-browser.js', 'utf8');
+  const sourceBrowser = await readFile('docs/source-browser.js', 'utf8');
+
+  assert.match(schemaBrowser, /import '\.\/service-worker-register\.js';/);
+  assert.match(sourceBrowser, /import '\.\/service-worker-register\.js';/);
+  assert.match(registration, /navigator\.serviceWorker\.register\(new URL\('service-worker\.js', document\.baseURI\)\)/);
+  assert.match(worker, /request\.method !== 'GET'/);
+  assert.match(worker, /url\.origin !== scopeURL\.origin/);
+  assert.match(worker, /cache\.put\(request, response\.clone\(\)\)/);
+  assert.match(worker, /ignoreSearch: true/);
+  assert.ok(worker.indexOf('const response = await fetch(request)') < worker.indexOf('const cached = await caches.match(request, options)'));
 });
 test('light and dark text colors meet WCAG AA contrast on viewer panels', async () => {
   const css = await readFile('docs/schema.css', 'utf8');
