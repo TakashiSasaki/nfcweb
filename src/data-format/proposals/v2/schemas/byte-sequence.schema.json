@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nfcweb.ai.studio/schemas/byte-sequence/v1",
+  "title": "ByteSequenceV1",
+  "description": "Proposed representation of an arbitrary finite byte sequence, with optional embedded bytes, external locations, digests, and external content identifiers. This schema is not yet canonical.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "byteLength": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Length of the raw byte sequence when known."
+    },
+    "digests": {
+      "type": "array",
+      "description": "Fingerprints computed directly over the raw byte sequence.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["algorithm", "value"],
+        "properties": {
+          "algorithm": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Digest algorithm identifier, for example sha-256."
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Digest value encoded as lowercase hexadecimal unless the named algorithm specifies another representation."
+          }
+        }
+      }
+    },
+    "identifiers": {
+      "type": "array",
+      "description": "External content identifiers such as ni: or swh: URIs. These are distinct from raw-byte digests because an external identifier scheme may define its own framing or semantics.",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "embedded": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["encoding", "data"],
+      "properties": {
+        "encoding": {
+          "type": "string",
+          "const": "base64"
+        },
+        "data": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "description": "The raw byte sequence embedded in the JSON document."
+        }
+      }
+    },
+    "locations": {
+      "type": "array",
+      "description": "URI-references from which the same byte sequence may be retrieved.",
+      "items": {
+        "type": "string",
+        "format": "uri-reference"
+      }
+    }
+  },
+  "anyOf": [
+    {"required": ["embedded"]},
+    {"required": ["locations"]},
+    {"required": ["digests"]},
+    {"required": ["identifiers"]}
+  ]
+}
