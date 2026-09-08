@@ -47,12 +47,22 @@ test('manifest derives new families and rejects missing or unsafe ids', () => {
   assert.throws(() => manifestEntry({title:'No ID'}, 'x.json'));
   assert.throws(() => manifestEntry({$id:'javascript:x', title:'Bad'}, 'x.json'));
 });
-test('artifact includes every canonical schema byte-for-byte and only documentation assets', async () => {
+test('artifact includes canonical and proposed schemas byte-for-byte and only documentation assets', async () => {
   await build();
   const {schemas} = JSON.parse(await readFile('_site/schema-manifest.json', 'utf8'));
-  const files = (await readdir('src/data-format/schemas')).filter(f => f.endsWith('.json'));
-  assert.equal(schemas.length, files.length);
-  for (const file of files) assert.deepEqual(await readFile(`_site/schemas/source/${file}`), await readFile(`src/data-format/schemas/${file}`));
+  const canonicalFiles = (await readdir('src/data-format/schemas')).filter(f => f.endsWith('.json')).sort();
+  const proposedFiles = (await readdir('src/data-format/proposals/v2-alpha.1/schemas')).filter(f => f.endsWith('.json')).sort();
+  const canonicalSchemas = schemas.filter(schema => schema.status === 'canonical');
+  const proposedSchemas = schemas.filter(schema => schema.status === 'proposed');
+  assert.equal(canonicalSchemas.length, canonicalFiles.length);
+  assert.equal(proposedSchemas.length, proposedFiles.length);
+  assert.equal(schemas.length, canonicalFiles.length + proposedFiles.length);
+  for (const file of canonicalFiles) {
+    assert.deepEqual(await readFile(`_site/schemas/source/${file}`), await readFile(`src/data-format/schemas/${file}`));
+  }
+  for (const file of proposedFiles) {
+    assert.deepEqual(await readFile(`_site/schemas/proposed/v2-alpha.1/${file}`), await readFile(`src/data-format/proposals/v2-alpha.1/schemas/${file}`));
+  }
   assert.deepEqual((await readdir('_site')).sort(), ['.nojekyll','index.html','schema-browser.js','schema-core.js','schema-manifest.json','schema.css','schema.html','schemas'].sort());
 });
 test('light and dark text colors meet WCAG AA contrast on viewer panels', async () => {
