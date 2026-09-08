@@ -1,3 +1,4 @@
+import './service-worker-register.js';
 import {viewerURL, sourceURL, resolveRef, renderJSON, fragmentTarget} from './schema-core.js';
 const base = document.baseURI;
 const status = document.getElementById('status');
