@@ -10,8 +10,14 @@ async function getJSON(path) {
 }
 function metadata(schema) {
   const dl = element('dl');
-  for (const [name, value] of [['Family', schema.family], ['Version', schema.version], ['$id', schema.id], ['Description', schema.description]]) dl.append(element('dt', name), element('dd', value));
+  const statusLabel = schema.status === 'proposed' ? 'Proposed design' : 'Canonical';
+  for (const [name, value] of [['Status', statusLabel], ['Family', schema.family], ['Version', schema.version], ['$id', schema.id], ['Description', schema.description]]) dl.append(element('dt', name), element('dd', value));
   return dl;
+}
+function statusBadge(schema) {
+  const badge = element('span', schema.status === 'proposed' ? 'PROPOSED' : 'CANONICAL');
+  badge.className = `schema-status ${schema.status === 'proposed' ? 'proposed' : 'canonical'}`;
+  return badge;
 }
 function refs(schema, schemas) {
   const list = element('ul');
@@ -40,23 +46,32 @@ try {
   const overview = document.getElementById('schema-list');
   if (overview) {
     for (const schema of schemas) {
-      const card = element('article'); card.className = 'card';
-      const title = element('h3'); title.append(link(schema.title, viewerURL(schema.id, base)));
+      const card = element('article'); card.className = `card schema-card ${schema.status === 'proposed' ? 'proposed' : 'canonical'}`;
+      const title = element('h3');
+      title.append(link(schema.title, viewerURL(schema.id, base)), document.createTextNode(' '), statusBadge(schema));
       const actions = element('div'); actions.className = 'links';
       actions.append(link('View schema', viewerURL(schema.id, base)), link('View raw JSON', new URL(schema.json, base)));
       card.append(title, metadata(schema), actions);
       if (schema.refs.length) card.append(element('h4', '$ref dependencies'), refs(schema, schemas));
       overview.append(card);
     }
-    status.textContent = `${schemas.length} canonical schemas`;
+    const canonicalCount = schemas.filter(s => s.status !== 'proposed').length;
+    const proposedCount = schemas.filter(s => s.status === 'proposed').length;
+    status.textContent = `${canonicalCount} canonical schemas · ${proposedCount} proposed schemas`;
   } else {
     const id = new URL(location.href).searchParams.get('id');
     const schema = schemas.find(s => s.id === id);
     if (!schema) throw Error('Schema が見つかりません。overview から選択してください。');
     const value = await getJSON(schema.json);
     document.title = `${schema.title} — NFCWeb schemas`;
-    document.getElementById('schema-title').textContent = value.title;
+    const heading = document.getElementById('schema-title');
+    heading.textContent = value.title;
+    heading.append(document.createTextNode(' '), statusBadge(schema));
     document.getElementById('schema-meta').append(metadata(schema), link('View raw JSON', new URL(schema.json, base)));
+    const note = document.getElementById('schema-note');
+    if (note) note.textContent = schema.status === 'proposed'
+      ? 'これは v2 design の提案スキーマです。canonical data-format の authority ではありません。$ref は同じ viewer 内で追跡できます。'
+      : 'Canonical JSON の公開ミラーです。参照リンクは viewer に移動しますが、JSON の URI は変更していません。';
     const relations = document.getElementById('relations');
     if (schema.refs.length) relations.append(element('h2', 'References'), refs(schema, schemas));
     const incoming = schemas.filter(s => s.id !== schema.id && s.refs.some(ref => resolveRef(ref, s.id, schemas, base).schema?.id === schema.id));
