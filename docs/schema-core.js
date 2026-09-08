@@ -6,6 +6,11 @@ export function viewerURL(id, base, fragment = '') {
   url.hash = fragment;
   return url.href;
 }
+export function sourceURL(id, base) {
+  const url = new URL('source.html', base);
+  url.searchParams.set('id', id);
+  return url.href;
+}
 export function resolveRef(ref, scope, schemas, base) {
   try {
     const uri = new URL(ref, scope);
@@ -62,6 +67,57 @@ export function renderJSON(document, value, schemas, base) {
     }
     line.append(token, row.comma ? ',\n' : '\n'); code.append(line);
   }
+  return code;
+}
+export function sourceTokens(line) {
+  const tokens = [];
+  const push = (type, text) => tokens.push({type, text});
+  let i = 0;
+  while (i < line.length) {
+    const char = line[i];
+    if (/\s/.test(char)) {
+      let j = i + 1; while (j < line.length && /\s/.test(line[j])) j++;
+      push('plain', line.slice(i, j)); i = j; continue;
+    }
+    if (char === '"') {
+      let j = i + 1, escaped = false;
+      while (j < line.length) {
+        const current = line[j];
+        if (!escaped && current === '"') { j++; break; }
+        if (!escaped && current === '\\') escaped = true; else escaped = false;
+        j++;
+      }
+      const text = line.slice(i, j);
+      let k = j; while (k < line.length && /\s/.test(line[k])) k++;
+      push(line[k] === ':' ? 'key' : 'string', text); i = j; continue;
+    }
+    const number = line.slice(i).match(/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/);
+    if (number) { push('number', number[0]); i += number[0].length; continue; }
+    const literal = line.slice(i).match(/^(true|false|null)\b/);
+    if (literal) { push(literal[1] === 'null' ? 'null' : 'boolean', literal[0]); i += literal[0].length; continue; }
+    if ('{}[],:'.includes(char)) { push('punctuation', char); i++; continue; }
+    let j = i + 1;
+    while (j < line.length && !/[\s"{}\[\],:]/.test(line[j])) j++;
+    push('plain', line.slice(i, j)); i = j;
+  }
+  return tokens;
+}
+export function renderSourceJSON(document, text) {
+  const code = document.createElement('code');
+  const finalNewline = text.endsWith('\n');
+  const lines = text.split('\n');
+  if (finalNewline) lines.pop();
+  lines.forEach((sourceLine, index) => {
+    const line = document.createElement('span');
+    line.className = 'source-line'; line.dataset.line = String(index + 1);
+    for (const part of sourceTokens(sourceLine)) {
+      const token = document.createElement('span');
+      token.className = part.type === 'plain' ? 'token-plain' : `token-${part.type}`;
+      token.textContent = part.text; line.append(token);
+    }
+    if (index < lines.length - 1 || finalNewline) line.append('\n');
+    code.append(line);
+  });
   return code;
 }
 export function fragmentTarget(hash) {
