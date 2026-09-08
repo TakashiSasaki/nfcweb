@@ -11,11 +11,14 @@ async function getJSON(path) {
 function metadata(schema) {
   const dl = element('dl');
   const statusLabel = schema.status === 'proposed' ? 'Proposed design' : 'Canonical';
-  for (const [name, value] of [['Status', statusLabel], ['Family', schema.family], ['Version', schema.version], ['$id', schema.id], ['Description', schema.description]]) dl.append(element('dt', name), element('dd', value));
+  const rows = [['Status', statusLabel]];
+  if (schema.designVersion) rows.push(['Design revision', schema.designVersion]);
+  rows.push(['Family', schema.family], ['Version', schema.version], ['$id', schema.id], ['Description', schema.description]);
+  for (const [name, value] of rows) dl.append(element('dt', name), element('dd', value));
   return dl;
 }
 function statusBadge(schema) {
-  const badge = element('span', schema.status === 'proposed' ? 'PROPOSED' : 'CANONICAL');
+  const badge = element('span', schema.status === 'proposed' ? (schema.designVersion || 'PROPOSED').toUpperCase() : 'CANONICAL');
   badge.className = `schema-status ${schema.status === 'proposed' ? 'proposed' : 'canonical'}`;
   return badge;
 }
@@ -56,8 +59,10 @@ try {
       overview.append(card);
     }
     const canonicalCount = schemas.filter(s => s.status !== 'proposed').length;
-    const proposedCount = schemas.filter(s => s.status === 'proposed').length;
-    status.textContent = `${canonicalCount} canonical schemas · ${proposedCount} proposed schemas`;
+    const proposed = schemas.filter(s => s.status === 'proposed');
+    const designVersions = [...new Set(proposed.map(s => s.designVersion).filter(Boolean))];
+    const proposedLabel = designVersions.length === 1 ? `${proposed.length} proposed schemas (${designVersions[0]})` : `${proposed.length} proposed schemas`;
+    status.textContent = `${canonicalCount} canonical schemas · ${proposedLabel}`;
   } else {
     const id = new URL(location.href).searchParams.get('id');
     const schema = schemas.find(s => s.id === id);
@@ -70,7 +75,7 @@ try {
     document.getElementById('schema-meta').append(metadata(schema), link('View raw JSON', new URL(schema.json, base)));
     const note = document.getElementById('schema-note');
     if (note) note.textContent = schema.status === 'proposed'
-      ? 'これは v2 design の提案スキーマです。canonical data-format の authority ではありません。$ref は同じ viewer 内で追跡できます。'
+      ? `これは ${schema.designVersion || 'development'} の提案スキーマです。canonical data-format の authority ではありません。$ref は同じ viewer 内で追跡できます。`
       : 'Canonical JSON の公開ミラーです。参照リンクは viewer に移動しますが、JSON の URI は変更していません。';
     const relations = document.getElementById('relations');
     if (schema.refs.length) relations.append(element('h2', 'References'), refs(schema, schemas));
