@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nfcweb.ai.studio/schemas/tag-photo/v1",
+  "title": "TagPhotoV1",
+  "description": "Proposed association describing what a logical image asset means to one NFC tag. This schema is not yet canonical.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["assetId"],
+  "properties": {
+    "assetId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier of an ImageAssetV1 entry in the containing registry assets collection. Referential integrity is enforced at the registry/application layer."
+    },
+    "purpose": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Application-defined semantic role of this photo for the tag, such as primary, detail, label, or context."
+    },
+    "caption": {
+      "type": "string",
+      "description": "Optional human-readable caption specific to this tag-photo association."
+    }
+  }
+}
