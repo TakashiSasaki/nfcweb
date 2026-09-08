@@ -8,7 +8,10 @@ on:
       - "scripts/build-schema-docs.mjs"
       - "tests/schema-docs.test.mjs"
       - "src/data-format/schemas/**"
+      - "src/data-format/proposals/v2-alpha.1/schemas/**"
       - "src/data-format/generated/bundles/**"
+      - "package.json"
+      - "bun.lock"
       - ".github/workflows/static.yml"
   workflow_dispatch:
 
@@ -35,16 +38,20 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '24'
+          bun-version: "1.4.0"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
       - name: Test schema browser and publication builder
-        run: node --test tests/schema-docs.test.mjs
+        run: bunx vitest run tests/schema-docs.test.mjs
 
       - name: Assemble schema documentation site
         run: node scripts/build-schema-docs.mjs
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
