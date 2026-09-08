@@ -1,3 +1,4 @@
+import './service-worker-register.js';
 import {viewerURL, renderSourceJSON} from './schema-core.js';
 
 const base = document.baseURI;
