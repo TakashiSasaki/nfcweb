@@ -50,7 +50,9 @@ export async function build(root = process.cwd()) {
   await mkdir(join(site, 'schemas/proposed/v2-alpha.1'), {recursive: true});
 
   // Explicit allowlist: never publish unrelated repository contents or test fixtures.
-  for (const file of ['index.html', 'schema.html', 'schema.css', 'schema-core.js', 'schema-browser.js']) await cp(join(root, 'docs', file), join(site, file));
+  for (const file of ['index.html', 'schema.html', 'source.html', 'schema.css', 'schema-core.js', 'schema-browser.js', 'source-browser.js']) {
+    await cp(join(root, 'docs', file), join(site, file));
+  }
   for (const file of canonical.files) await cp(join(canonicalSource, file), join(site, 'schemas/source', file));
   for (const file of proposed.files) await cp(join(proposedV2Source, file), join(site, 'schemas/proposed/v2-alpha.1', file));
   await cp(join(root, 'src/data-format/generated/bundles'), join(site, 'schemas/bundles'), {recursive: true});

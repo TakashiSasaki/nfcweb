@@ -1,4 +1,4 @@
-import {viewerURL, resolveRef, renderJSON, fragmentTarget} from './schema-core.js';
+import {viewerURL, sourceURL, resolveRef, renderJSON, fragmentTarget} from './schema-core.js';
 const base = document.baseURI;
 const status = document.getElementById('status');
 const element = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; return node; };
@@ -18,9 +18,20 @@ function metadata(schema) {
   return dl;
 }
 function statusBadge(schema) {
-  const badge = element('span', schema.status === 'proposed' ? (schema.designVersion || 'PROPOSED').toUpperCase() : 'CANONICAL');
+  const badge = element('span', schema.status === 'proposed' ? 'PROPOSED' : 'CANONICAL');
   badge.className = `schema-status ${schema.status === 'proposed' ? 'proposed' : 'canonical'}`;
   return badge;
+}
+function designBadge(schema) {
+  if (!schema.designVersion) return null;
+  const badge = element('span', schema.designVersion);
+  badge.className = 'schema-status design';
+  return badge;
+}
+function appendBadges(node, schema) {
+  node.append(document.createTextNode(' '), statusBadge(schema));
+  const design = designBadge(schema);
+  if (design) node.append(document.createTextNode(' '), design);
 }
 function refs(schema, schemas) {
   const list = element('ul');
@@ -51,9 +62,13 @@ try {
     for (const schema of schemas) {
       const card = element('article'); card.className = `card schema-card ${schema.status === 'proposed' ? 'proposed' : 'canonical'}`;
       const title = element('h3');
-      title.append(link(schema.title, viewerURL(schema.id, base)), document.createTextNode(' '), statusBadge(schema));
+      title.append(link(schema.title, viewerURL(schema.id, base))); appendBadges(title, schema);
       const actions = element('div'); actions.className = 'links';
-      actions.append(link('View schema', viewerURL(schema.id, base)), link('View raw JSON', new URL(schema.json, base)));
+      actions.append(
+        link('View schema', viewerURL(schema.id, base)),
+        link('View source', sourceURL(schema.id, base)),
+        link('View raw JSON', new URL(schema.json, base))
+      );
       card.append(title, metadata(schema), actions);
       if (schema.refs.length) card.append(element('h4', '$ref dependencies'), refs(schema, schemas));
       overview.append(card);
@@ -70,9 +85,10 @@ try {
     const value = await getJSON(schema.json);
     document.title = `${schema.title} — NFCWeb schemas`;
     const heading = document.getElementById('schema-title');
-    heading.textContent = value.title;
-    heading.append(document.createTextNode(' '), statusBadge(schema));
-    document.getElementById('schema-meta').append(metadata(schema), link('View raw JSON', new URL(schema.json, base)));
+    heading.textContent = value.title; appendBadges(heading, schema);
+    const actions = element('div'); actions.className = 'links';
+    actions.append(link('View source', sourceURL(schema.id, base)), link('View raw JSON', new URL(schema.json, base)));
+    document.getElementById('schema-meta').append(metadata(schema), actions);
     const note = document.getElementById('schema-note');
     if (note) note.textContent = schema.status === 'proposed'
       ? `これは ${schema.designVersion || 'development'} の提案スキーマです。canonical data-format の authority ではありません。$ref は同じ viewer 内で追跡できます。`
