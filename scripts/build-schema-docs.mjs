@@ -26,7 +26,7 @@ async function readSchemaSet(source, optionsForFile) {
 
 export async function build(root = process.cwd()) {
   const canonicalSource = join(root, 'src/data-format/schemas');
-  const proposedV2Source = join(root, 'src/data-format/proposals/v2/schemas');
+  const proposedV2Source = join(root, 'src/data-format/proposals/v2-alpha.1/schemas');
   const canonical = await readSchemaSet(canonicalSource, file => ({
     status: 'canonical',
     json: `schemas/source/${encodeURIComponent(file)}`
@@ -34,7 +34,7 @@ export async function build(root = process.cwd()) {
   if (!canonical.files.length) throw Error('No canonical schemas');
   const proposed = await readSchemaSet(proposedV2Source, file => ({
     status: 'proposed',
-    json: `schemas/proposed/v2/${encodeURIComponent(file)}`
+    json: `schemas/proposed/v2-alpha.1/${encodeURIComponent(file)}`
   }));
   const schemas = [...canonical.schemas, ...proposed.schemas];
   if (new Set(schemas.map(s => s.id)).size !== schemas.length) throw Error('Duplicate schema $id');
@@ -42,12 +42,12 @@ export async function build(root = process.cwd()) {
   const site = join(root, '_site');
   await rm(site, {recursive: true, force: true});
   await mkdir(join(site, 'schemas/source'), {recursive: true});
-  await mkdir(join(site, 'schemas/proposed/v2'), {recursive: true});
+  await mkdir(join(site, 'schemas/proposed/v2-alpha.1'), {recursive: true});
 
   // Explicit allowlist: never publish unrelated repository contents or test fixtures.
   for (const file of ['index.html', 'schema.html', 'schema.css', 'schema-core.js', 'schema-browser.js']) await cp(join(root, 'docs', file), join(site, file));
   for (const file of canonical.files) await cp(join(canonicalSource, file), join(site, 'schemas/source', file));
-  for (const file of proposed.files) await cp(join(proposedV2Source, file), join(site, 'schemas/proposed/v2', file));
+  for (const file of proposed.files) await cp(join(proposedV2Source, file), join(site, 'schemas/proposed/v2-alpha.1', file));
   await cp(join(root, 'src/data-format/generated/bundles'), join(site, 'schemas/bundles'), {recursive: true});
   await writeFile(join(site, 'schema-manifest.json'), JSON.stringify({schemas}, null, 2) + '\n');
   await writeFile(join(site, '.nojekyll'), '');
