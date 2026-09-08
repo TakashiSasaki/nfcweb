@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NFCWeb Data Schemas</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f7f8fb;--panel:#fff;--panel2:#eef2f7;--text:#17202a;--muted:#5f6b78;--border:#cfd7e1;--accent:#2457c5;--nfc:#dce8ff;--image:#eadfff;--bytes:#def4e8;--id:#ffe9c9} @media(prefers-color-scheme:dark){:root{--bg:#10151c;--panel:#171e27;--panel2:#1e2732;--text:#e9eef5;--muted:#a9b3bf;--border:#344150;--accent:#84aaff;--nfc:#213d69;--image:#402f5d;--bytes:#1a4234;--id:#513c1e}}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI","Noto Sans JP",sans-serif}.page{width:min(1120px,calc(100% - 28px));margin:auto;padding:32px 0 64px}h1,h2,h3{line-height:1.25}h1{font-size:clamp(1.8rem,3vw,2.6rem);margin:0}h2{margin:34px 0 14px;font-size:1.45rem}h3{margin:0 0 6px;font-size:1rem}p{margin:.5em 0}.lead{max-width:850px;color:var(--muted)}.notice,.card,.diagram,.tablewrap{border:1px solid var(--border);border-radius:14px;background:var(--panel)}.notice{padding:13px 15px;background:var(--panel2);margin:18px 0}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.card{padding:15px;min-width:0}.card p{color:var(--muted)}a{color:var(--accent)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.diagram{overflow-x:auto;padding:15px}.diagram svg{display:block;min-width:850px;width:100%;height:auto}.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:760px}th,td{text-align:left;vertical-align:top;padding:11px 13px;border-bottom:1px solid var(--border)}th{background:var(--panel2)}tr:last-child td{border-bottom:0}.badge{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:.8rem;color:var(--muted)}.links{display:flex;flex-wrap:wrap;gap:8px}.links a{display:inline-block;border:1px solid var(--border);border-radius:9px;padding:7px 10px;text-decoration:none;background:var(--panel)}.small{font-size:.9rem;color:var(--muted)}footer{margin-top:36px;border-top:1px solid var(--border);padding-top:16px;color:var(--muted);font-size:.88rem}@media(max-width:800px){.grid{grid-template-columns:1fr}.page{width:min(100% - 18px,1120px);padding-top:20px}}
+  </style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <span class="badge">NFCWeb schema documentation</span>
+    <h1>Data Schema Overview</h1>
+    <p class="lead">NFCWeb の canonical JSON Schema と、その発展案を俯瞰する静的ドキュメントです。現在の v1 schema を authority として示し、画像・任意バイト列を扱う v2 設計案は明確に区別して掲載します。</p>
+    <div class="notice"><strong>Authority:</strong> 現在の canonical source of truth は <code>src/data-format/schemas/*.schema.json</code> です。この Pages サイトに配置される JSON は workflow がそのファイルをコピーした公開用ミラーです。</div>
+  </header>
+
+  <section>
+    <h2>Current canonical schemas — v1</h2>
+    <div class="grid">
+      <article class="card"><h3>NDEF Record</h3><p>NDEF record の共通表現。</p><div class="links"><a href="schemas/source/ndef-record.schema.json">Schema JSON</a></div></article>
+      <article class="card"><h3>NFC Tag</h3><p>UID、観測時刻、NDEF records などを持つ managed NFC tag。</p><div class="links"><a href="schemas/source/nfc-tag.schema.json">Schema JSON</a><a href="schemas/bundles/nfc-tag.bundle.json">Bundle</a></div></article>
+      <article class="card"><h3>NFC Tag Registry</h3><p>タグ集合の canonical interchange / backup format。</p><div class="links"><a href="schemas/source/nfc-tag-registry.schema.json">Schema JSON</a><a href="schemas/bundles/nfc-tag-registry.bundle.json">Bundle</a></div></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Proposed schema architecture — v2 design</h2>
+    <p class="small">以下は複数写真、多様な画像形式、inline bytes、URI locations、複数 digest / external identifier を扱うために検討中の設計で、まだ canonical v1 ではありません。</p>
+    <div class="diagram">
+      <svg viewBox="0 0 1050 720" role="img" aria-labelledby="t d">
+        <title id="t">Proposed NFCWeb schema hierarchy</title><desc id="d">NFC tag registry contains tags and image assets. Image representations reference generic byte sequences, which may carry digests, external identifiers, embedded bytes and locations.</desc>
+        <defs><marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9z" fill="var(--muted)"/></marker></defs>
+        <g fill="none" stroke="var(--muted)" stroke-width="2" marker-end="url(#a)"><path d="M525 75v40"/><path d="M465 195C390 220 320 245 260 285"/><path d="M585 195C660 220 730 245 790 285"/><path d="M260 355C350 400 470 420 650 445" stroke-dasharray="7 6"/><path d="M790 355v70"/><path d="M790 495v70"/><path d="M790 635C710 660 630 670 565 690"/><path d="M790 635C850 660 900 670 930 690"/></g>
+        <g fill="var(--muted)" font-size="13"><text x="540" y="101">tags[] / assets[]</text><text x="330" y="244">photos[]</text><text x="680" y="244">assets[]</text><text x="375" y="407">assetId reference</text><text x="804" y="398">representations[]</text><text x="804" y="540">content</text><text x="620" y="670">digests / identifiers</text><text x="885" y="670">embedded / locations</text></g>
+        <g fill="var(--nfc)" stroke="var(--border)"><rect x="390" y="20" width="270" height="55" rx="12"/><rect x="390" y="115" width="270" height="80" rx="12"/></g>
+        <g fill="var(--image)" stroke="var(--border)"><rect x="125" y="285" width="270" height="70" rx="12"/><rect x="655" y="285" width="270" height="70" rx="12"/><rect x="640" y="425" width="300" height="70" rx="12"/></g>
+        <rect x="655" y="565" width="270" height="70" rx="12" fill="var(--bytes)" stroke="var(--border)"/><g fill="var(--id)" stroke="var(--border)"><rect x="445" y="680" width="240" height="38" rx="10"/><rect x="820" y="680" width="210" height="38" rx="10"/></g>
+        <g fill="var(--text)" text-anchor="middle"><text x="525" y="54" font-size="17" font-weight="700">NfcTagRegistryV2</text><text x="525" y="149" font-size="17" font-weight="700">NfcTagV2</text><text x="525" y="174" font-size="12">uid · NDEF · photos[]</text><text x="260" y="317" font-size="17" font-weight="700">TagPhotoV1</text><text x="260" y="339" font-size="12">assetId · purpose · caption</text><text x="790" y="317" font-size="17" font-weight="700">ImageAssetV1</text><text x="790" y="339" font-size="12">logical image</text><text x="790" y="457" font-size="17" font-weight="700">ImageRepresentationV1</text><text x="790" y="479" font-size="12">role · mediaType · dimensions</text><text x="790" y="597" font-size="17" font-weight="700">ByteSequenceV1</text><text x="790" y="619" font-size="12">arbitrary finite bytes</text><text x="565" y="705" font-size="15" font-weight="700">Identity / digest</text><text x="925" y="705" font-size="15" font-weight="700">Storage / location</text></g>
+      </svg>
+    </div>
+  </section>
+
+  <section>
+    <h2>Proposed responsibilities</h2>
+    <div class="tablewrap"><table><thead><tr><th>Schema</th><th>Responsibility</th><th>Main relationship</th></tr></thead><tbody>
+      <tr><td><code>NfcTagV2</code></td><td>NFC tag の論理情報</td><td><code>photos[] → TagPhotoV1</code></td></tr>
+      <tr><td><code>TagPhotoV1</code></td><td>タグにとって画像が何を意味するか</td><td><code>assetId → ImageAssetV1</code></td></tr>
+      <tr><td><code>ImageAssetV1</code></td><td>1枚の論理画像</td><td><code>representations[]</code></td></tr>
+      <tr><td><code>ImageRepresentationV1</code></td><td>original / display / thumbnail 等の具体的符号化</td><td><code>content → ByteSequenceV1</code></td></tr>
+      <tr><td><code>ByteSequenceV1</code></td><td>画像に依存しない有限バイト列</td><td>digest / identifier / embedded / location</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section>
+    <h2>ByteSequence model</h2>
+    <div class="grid">
+      <article class="card"><h3>Digests</h3><p>生 bytes に直接適用した複数の fingerprint。例: SHA-1, SHA-256。Git blob OID のように framing を伴う外部識別子とは分離します。</p></article>
+      <article class="card"><h3>Identifiers</h3><p><code>ni:</code>, <code>swh:</code> など外部体系で content を識別する URI。</p></article>
+      <article class="card"><h3>Embedded bytes</h3><p>document 自体が bytes を包含する場合。JSON では通常 Base64 で符号化します。</p></article>
+      <article class="card"><h3>Locations</h3><p>document 外に存在する bytes の URI-reference。HTTPS、相対 URI その他を許容できます。</p></article>
+      <article class="card"><h3>Same content</h3><p>inline、location、digest→CAS のどの経路で得ても、同じ byte sequence なら同一 content とみなします。</p></article>
+      <article class="card"><h3>Thumbnail</h3><p>保存方式ではなく <code>ImageRepresentation.role = "thumbnail"</code>。inline か外部化かは ByteSequence 側の選択です。</p></article>
+    </div>
+  </section>
+
+  <footer>GitHub Pages publishes this documentation from <code>docs/</code>. Canonical schema JSON and generated bundles are copied from their repository authority locations during deployment.</footer>
+</main>
+</body>
+</html>
