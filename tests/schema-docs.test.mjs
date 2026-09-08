@@ -1,5 +1,4 @@
-import {test} from 'node:test';
-import assert from 'node:assert/strict';
+import {test, assert} from 'vitest';
 import {readFile, readdir} from 'node:fs/promises';
 import {viewerURL, resolveRef, jsonLines, renderJSON, fragmentTarget} from '../docs/schema-core.js';
 import {manifestEntry, build} from '../scripts/build-schema-docs.mjs';
