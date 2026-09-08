@@ -4,6 +4,14 @@ import {viewerURL, resolveRef, jsonLines, renderJSON, fragmentTarget} from '../d
 import {manifestEntry, build} from '../scripts/build-schema-docs.mjs';
 const id = 'https://nfcweb.ai.studio/schemas/example/v1';
 const schemas = [{id}];
+const proposedFilesExpected = [
+  'byte-sequence.schema.json',
+  'image-asset.schema.json',
+  'image-representation.schema.json',
+  'nfc-tag-registry.schema.json',
+  'nfc-tag.schema.json',
+  'tag-photo.schema.json'
+];
 test('viewer URLs retain project and custom domain base paths', () => {
   for (const base of ['https://example.org/nfcweb/index.html', 'https://example.org/index.html']) {
     const url = new URL(viewerURL(id, base, '#/$defs/foo'));
@@ -40,28 +48,42 @@ test('renderer only creates text nodes, never HTML from schema strings', () => {
   assert.ok(nodes.some(n => n.children.includes(JSON.stringify(attack))));
   assert.ok(nodes.every(n => ['span', 'code'].includes(n.tag)));
 });
-test('manifest derives new families and rejects missing or unsafe ids', () => {
+test('manifest derives identity and records repository source provenance', () => {
   const entry = manifestEntry({$id:id, title:'Example', description:'Example schema', $ref:'#foo'}, 'example.json');
   assert.equal(entry.family, 'example'); assert.equal(entry.version, 'v1');
+  assert.equal(entry.sourcePath, 'src/data-format/schemas/example.json');
   assert.deepEqual(entry.refs, [id + '#foo']);
   assert.throws(() => manifestEntry({title:'No ID'}, 'x.json'));
   assert.throws(() => manifestEntry({$id:'javascript:x', title:'Bad'}, 'x.json'));
 });
-test('artifact includes canonical and proposed schemas byte-for-byte and only documentation assets', async () => {
+test('artifact includes canonical and proposed schemas byte-for-byte with unchanged ids and provenance', async () => {
   await build();
   const {schemas} = JSON.parse(await readFile('_site/schema-manifest.json', 'utf8'));
   const canonicalFiles = (await readdir('src/data-format/schemas')).filter(f => f.endsWith('.json')).sort();
   const proposedFiles = (await readdir('src/data-format/proposals/v2-alpha.1/schemas')).filter(f => f.endsWith('.json')).sort();
+  assert.deepEqual(proposedFiles, proposedFilesExpected);
   const canonicalSchemas = schemas.filter(schema => schema.status === 'canonical');
   const proposedSchemas = schemas.filter(schema => schema.status === 'proposed');
   assert.equal(canonicalSchemas.length, canonicalFiles.length);
   assert.equal(proposedSchemas.length, proposedFiles.length);
   assert.equal(schemas.length, canonicalFiles.length + proposedFiles.length);
   for (const file of canonicalFiles) {
-    assert.deepEqual(await readFile(`_site/schemas/source/${file}`), await readFile(`src/data-format/schemas/${file}`));
+    const sourcePath = `src/data-format/schemas/${file}`;
+    const source = await readFile(sourcePath);
+    const entry = canonicalSchemas.find(schema => schema.sourcePath === sourcePath);
+    assert.ok(entry, `missing canonical provenance for ${file}`);
+    assert.equal(entry.designVersion, undefined);
+    assert.equal(entry.id, JSON.parse(source.toString('utf8')).$id);
+    assert.deepEqual(await readFile(`_site/schemas/source/${file}`), source);
   }
   for (const file of proposedFiles) {
-    assert.deepEqual(await readFile(`_site/schemas/proposed/v2-alpha.1/${file}`), await readFile(`src/data-format/proposals/v2-alpha.1/schemas/${file}`));
+    const sourcePath = `src/data-format/proposals/v2-alpha.1/schemas/${file}`;
+    const source = await readFile(sourcePath);
+    const entry = proposedSchemas.find(schema => schema.sourcePath === sourcePath);
+    assert.ok(entry, `missing proposed provenance for ${file}`);
+    assert.equal(entry.designVersion, 'v2-alpha.1');
+    assert.equal(entry.id, JSON.parse(source.toString('utf8')).$id);
+    assert.deepEqual(await readFile(`_site/schemas/proposed/v2-alpha.1/${file}`), source);
   }
   assert.deepEqual((await readdir('_site')).sort(), ['.nojekyll','index.html','schema-browser.js','schema-core.js','schema-manifest.json','schema.css','schema.html','schemas'].sort());
 });

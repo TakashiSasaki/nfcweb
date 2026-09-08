@@ -10,9 +10,10 @@ export function manifestEntry(schema, filename, options = {}) {
   const parts = uri.pathname.split('/').filter(Boolean);
   const status = options.status || 'canonical';
   const json = options.json || `schemas/source/${encodeURIComponent(filename)}`;
+  const sourcePath = options.sourcePath || `src/data-format/schemas/${filename}`;
   return {id: uri.href, title: schema.title, family: parts.at(-2), version: parts.at(-1), status,
     ...(options.designVersion ? {designVersion: options.designVersion} : {}),
-    description: schema.description || '', json,
+    description: schema.description || '', json, sourcePath,
     refs: [...new Set(jsonLines(schema).filter(row => row.ref !== undefined).map(row => new URL(row.ref, row.scope).href))]};
 }
 
@@ -30,13 +31,15 @@ export async function build(root = process.cwd()) {
   const proposedV2Source = join(root, 'src/data-format/proposals/v2-alpha.1/schemas');
   const canonical = await readSchemaSet(canonicalSource, file => ({
     status: 'canonical',
-    json: `schemas/source/${encodeURIComponent(file)}`
+    json: `schemas/source/${encodeURIComponent(file)}`,
+    sourcePath: `src/data-format/schemas/${file}`
   }));
   if (!canonical.files.length) throw Error('No canonical schemas');
   const proposed = await readSchemaSet(proposedV2Source, file => ({
     status: 'proposed',
     designVersion: 'v2-alpha.1',
-    json: `schemas/proposed/v2-alpha.1/${encodeURIComponent(file)}`
+    json: `schemas/proposed/v2-alpha.1/${encodeURIComponent(file)}`,
+    sourcePath: `src/data-format/proposals/v2-alpha.1/schemas/${file}`
   }));
   const schemas = [...canonical.schemas, ...proposed.schemas];
   if (new Set(schemas.map(s => s.id)).size !== schemas.length) throw Error('Duplicate schema $id');
