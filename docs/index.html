@@ -8,6 +8,8 @@
     :root{color-scheme:light dark;--bg:#f7f8fb;--panel:#fff;--panel2:#eef2f7;--text:#17202a;--muted:#5f6b78;--border:#cfd7e1;--accent:#2457c5;--nfc:#dce8ff;--image:#eadfff;--bytes:#def4e8;--id:#ffe9c9} @media(prefers-color-scheme:dark){:root{--bg:#10151c;--panel:#171e27;--panel2:#1e2732;--text:#e9eef5;--muted:#a9b3bf;--border:#344150;--accent:#84aaff;--nfc:#213d69;--image:#402f5d;--bytes:#1a4234;--id:#513c1e}}
     *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI","Noto Sans JP",sans-serif}.page{width:min(1120px,calc(100% - 28px));margin:auto;padding:32px 0 64px}h1,h2,h3{line-height:1.25}h1{font-size:clamp(1.8rem,3vw,2.6rem);margin:0}h2{margin:34px 0 14px;font-size:1.45rem}h3{margin:0 0 6px;font-size:1rem}p{margin:.5em 0}.lead{max-width:850px;color:var(--muted)}.notice,.card,.diagram,.tablewrap{border:1px solid var(--border);border-radius:14px;background:var(--panel)}.notice{padding:13px 15px;background:var(--panel2);margin:18px 0}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.card{padding:15px;min-width:0}.card p{color:var(--muted)}a{color:var(--accent)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.diagram{overflow-x:auto;padding:15px}.diagram svg{display:block;min-width:850px;width:100%;height:auto}.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:760px}th,td{text-align:left;vertical-align:top;padding:11px 13px;border-bottom:1px solid var(--border)}th{background:var(--panel2)}tr:last-child td{border-bottom:0}.badge{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:.8rem;color:var(--muted)}.links{display:flex;flex-wrap:wrap;gap:8px}.links a{display:inline-block;border:1px solid var(--border);border-radius:9px;padding:7px 10px;text-decoration:none;background:var(--panel)}.small{font-size:.9rem;color:var(--muted)}footer{margin-top:36px;border-top:1px solid var(--border);padding-top:16px;color:var(--muted);font-size:.88rem}@media(max-width:800px){.grid{grid-template-columns:1fr}.page{width:min(100% - 18px,1120px);padding-top:20px}}
   </style>
+  <link rel="stylesheet" href="schema.css">
+  <script type="module" src="schema-browser.js"></script>
 </head>
 <body>
 <main class="page">
@@ -19,13 +21,7 @@
   </header>
 
   <section>
-    <h2>Current canonical schemas — v1</h2>
-    <div class="grid">
-      <article class="card"><h3>NDEF Record</h3><p>NDEF record の共通表現。</p><div class="links"><a href="schemas/source/ndef-record.schema.json">Schema JSON</a></div></article>
-      <article class="card"><h3>NFC Tag</h3><p>UID、観測時刻、NDEF records などを持つ managed NFC tag。</p><div class="links"><a href="schemas/source/nfc-tag.schema.json">Schema JSON</a><a href="schemas/bundles/nfc-tag.bundle.json">Bundle</a></div></article>
-      <article class="card"><h3>NFC Tag Registry</h3><p>タグ集合の canonical interchange / backup format。</p><div class="links"><a href="schemas/source/nfc-tag-registry.schema.json">Schema JSON</a><a href="schemas/bundles/nfc-tag-registry.bundle.json">Bundle</a></div></article>
-    </div>
-  </section>
+    <h2>Canonical schema browser</h2><p id="status" role="status">Loading schemas…</p><div id="schema-list" class="grid"></div><noscript>JavaScript を有効にするか、<a href="schema-manifest.json">manifest</a>をご覧ください。</noscript></section>
 
   <section>
     <h2>Proposed schema architecture — v2 design</h2>

@@ -5,6 +5,8 @@ on:
     branches: ["main"]
     paths:
       - "docs/**"
+      - "scripts/build-schema-docs.mjs"
+      - "tests/schema-docs.test.mjs"
       - "src/data-format/schemas/**"
       - "src/data-format/generated/bundles/**"
       - ".github/workflows/static.yml"
@@ -33,26 +35,16 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Test schema browser and publication builder
+        run: node --test tests/schema-docs.test.mjs
+
       - name: Assemble schema documentation site
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          test -f docs/index.html
-          test -f src/data-format/schemas/ndef-record.schema.json
-          test -f src/data-format/schemas/nfc-tag.schema.json
-          test -f src/data-format/schemas/nfc-tag-registry.schema.json
-
-          rm -rf _site
-          mkdir -p _site/schemas/source _site/schemas/bundles
-
-          cp -a docs/. _site/
-          cp src/data-format/schemas/*.json _site/schemas/source/
-          cp src/data-format/generated/bundles/*.json _site/schemas/bundles/
-
-          # Disable Jekyll processing: this site is already complete static content.
-          touch _site/.nojekyll
-
+        run: node scripts/build-schema-docs.mjs
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
