@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nfcweb.ai.studio/schemas/nfc-tag/v2",
+  "title": "NfcTagV2",
+  "description": "Proposed v2 representation of a managed NFC tag, extending the v1 logical tag model with photo associations. This schema is not yet canonical.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["uid", "firstSeen", "lastRead", "readCount", "hasNdef", "records", "photos"],
+  "properties": {
+    "uid": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{2}){4,16}$",
+      "description": "Canonical lowercase hexadecimal UID without separators."
+    },
+    "name": {
+      "type": "string"
+    },
+    "firstSeen": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "lastRead": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "readCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "lastAction": {
+      "type": "string",
+      "enum": ["read", "write", "erase"]
+    },
+    "tagType": {
+      "type": "string"
+    },
+    "hasNdef": {
+      "type": "boolean"
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "$ref": "https://nfcweb.ai.studio/schemas/ndef-record/v1"
+      }
+    },
+    "notes": {
+      "type": "string"
+    },
+    "photos": {
+      "type": "array",
+      "description": "Ordered associations between this tag and logical image assets.",
+      "items": {
+        "$ref": "https://nfcweb.ai.studio/schemas/tag-photo/v1"
+      }
+    }
+  }
+}
