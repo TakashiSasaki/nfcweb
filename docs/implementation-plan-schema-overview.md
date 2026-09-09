@@ -96,10 +96,22 @@
 
 ## 現在の進捗
 
-- 完了: 最新mainのpull、PR #8/#9の状態確認、builder・UI・SW・Pages workflow・既存テストの調査、実装計画の作成。
-- Phase 1完了: PR #8をmainへmerge（8046760）。GitHub CIとPages deploymentが成功。
-- Phase 2実装・ローカル検証済み: 全179テスト、型検査、productionビルド、artifact identity検査が成功。ブラウザで最新版・時刻・revision表示を確認。
-- Phase 2はPR #10をmerge（4f41354）、公開metadataの反映を確認。
-- 公開受け入れで旧HTTPキャッシュのmodule interface混在を検出し、HTMLと全static importのasset URLにもdeployment identityを付ける追加修正を実装。artifact検査と回帰テストで保護する。
-- ローカルの開いたままの旧版は定期確認により新revisionへ自動回復できることをブラウザで確認済み。
-- 残り: asset identity追加修正のCI・merge・公開受け入れ。
+- **全関連PRのmerge完了**:
+  - PR #8（`compact-schema-browser-cards`, commit `8046760`）: Overviewの3タブ化、カード一覧性向上、Status重複行除外、same-document fragment $ref 除外をマージ完了。
+  - PR #10（`codex/documentation-freshness`, commit `4f41354`）: build/deployment identity、共通 freshness indicator、stale/offline handling、deployment-specific Service Worker cache をマージ完了。
+  - PR #11（`codex/documentation-asset-identity`, commit `2248363`）: fresh HTML と HTTP-cached old module の混在防止のため、HTMLおよび静的JS import graph 全体に deployment identity query parameter（`?build=${revision}-${builtAt}`）を付与する asset versioning をマージ完了。
+- **CIおよびGitHub Pages deployment**:
+  - `main` HEAD（`2248363`）における CI workflow（Run ID `34306441035`）および Pages deploy workflow（Run ID `34306441022`）がいずれも green（success）であることを確認。
+- **公開環境（https://takashisasaki.github.io/nfcweb/）実ブラウザ（Playwright Chromium）受け入れ結果**:
+  - **Overview 3タブ**: default が Schema Browser、各タブ（`#schemas`, `#architecture`, `#responsibilities`）の直接URL遷移、reload時の選択維持、ブラウザ Back / Forward 履歴同期、不正hash時の `#schemas` fallback、モバイル幅（375px）での崩れなき表示を実証。
+  - **Schema Browserカード**: 全11スキーマ（canonical 3 + proposed 8）のカード表示、Statusメタデータ行の非重複、PROPOSED/CANONICAL status badge表示、same-document fragment依存の非表示、外部依存関係の正常表示、Schema Viewer / Source Viewer への遷移を確認。
+  - **Freshness indicator**: Overview、Schema viewer、Source viewer の全3画面で、表示中 revision（`2248363`）および build age（相対日時）、tooltip（絶対日時・完全revision）が表示され、`site-version.json` と完全一致して「✓ 最新版」となることを確認。
+  - **Offline動作**: online で読み込み後、offline 状態で reload しても Service Worker の Cache Storage から cached documentation が完全に表示され、freshness が「Offline copy · 最新版を確認できません」へ正しく遷移することを確認。
+  - **キーボードナビゲーション改善**: Chromium における `window.location.hash` 変更時のフォーカス逸失を防ぎ、ArrowRight / ArrowLeft / Home / End による連続タブ移動時にも選択中タブボタンへフォーカスが確実に維持されるよう remediation 完了。
+- **制御環境における2ビルド自動更新（Bounded recovery）検証**:
+  - 旧デプロイ（`aaaaaaa`）表示状態から新デプロイ（`bbbbbbb`）へサーバーが切り替わった際、mismatch detection → 新 Service Worker の activation 待機 → session あたり最大1回の自動 reload → 新デプロイ（`bbbbbbb` /「✓ 最新版」）への完全回復を実証。
+  - `sessionStorage` に `attempted` が記録され、以降の確認で reload loop が発生しない bounded recovery を確認。
+- **未検証事項**:
+  - 本番公開環境（`takashisasaki.github.io`）上での稼働中タブに対するリアルタイム新旧デプロイ切り替え（運用中の本番環境を意図的に壊すことなく安全に実施するため、ローカルの2-build実ブラウザ自動化テストにて同一ロジックを完全実証し、本番環境での直接切替試行は未実施として区別）。
+- **ステータス**:
+  - Data Schema Overview の一覧性改善、GitHub Pages documentation freshness、および stale-cache recovery の improvement stack はすべて完了（Complete）。

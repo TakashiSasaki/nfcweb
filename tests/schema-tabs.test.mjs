@@ -47,5 +47,9 @@ test('clicks, keyboard and browser history synchronize selection', async () => {
   w.history.forward(); await forward;
   w.dispatchEvent(new w.HashChangeEvent('hashchange'));
   expect(d.getElementById('responsibilities').hidden).toBe(false);
+  const third = new Promise(resolve => w.addEventListener('hashchange', resolve, {once:true}));
+  d.activeElement.dispatchEvent(new w.KeyboardEvent('keydown', {key:'ArrowRight', bubbles:true})); await third;
+  expect(w.location.hash).toBe('#schemas');
+  expect(d.activeElement.id).toBe('tab-schemas');
   dom.window.close();
 });
