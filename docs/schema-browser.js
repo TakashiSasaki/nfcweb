@@ -1,5 +1,5 @@
 import './service-worker-register.js';
-import {viewerURL, sourceURL, resolveRef, renderJSON, fragmentTarget} from './schema-core.js';
+import {viewerURL, sourceURL, resolveRef, isExternalDocumentRef, renderJSON, fragmentTarget} from './schema-core.js';
 const base = document.baseURI;
 const status = document.getElementById('status');
 const element = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; return node; };
@@ -9,10 +9,11 @@ async function getJSON(path) {
   if (!response.ok) throw Error(`HTTP ${response.status}`);
   return response.json();
 }
-function metadata(schema) {
+function metadata(schema, {includeStatus = true} = {}) {
   const dl = element('dl');
   const statusLabel = schema.status === 'proposed' ? 'Proposed design' : 'Canonical';
-  const rows = [['Status', statusLabel]];
+  const rows = [];
+  if (includeStatus) rows.push(['Status', statusLabel]);
   if (schema.designVersion) rows.push(['Design revision', schema.designVersion]);
   rows.push(['Family', schema.family], ['Version', schema.version], ['$id', schema.id], ['Description', schema.description]);
   for (const [name, value] of rows) dl.append(element('dt', name), element('dd', value));
@@ -34,9 +35,9 @@ function appendBadges(node, schema) {
   const design = designBadge(schema);
   if (design) node.append(document.createTextNode(' '), design);
 }
-function refs(schema, schemas) {
+function refs(schema, schemas, refValues = schema.refs) {
   const list = element('ul');
-  for (const ref of schema.refs) {
+  for (const ref of refValues) {
     const resolved = resolveRef(ref, schema.id, schemas, base);
     const item = element('li');
     const fragment = ref.includes('#') ? ref.slice(ref.indexOf('#')) : '';
@@ -70,8 +71,9 @@ try {
         link('View source', sourceURL(schema.id, base)),
         link('View raw JSON', new URL(schema.json, base))
       );
-      card.append(title, metadata(schema), actions);
-      if (schema.refs.length) card.append(element('h4', '$ref dependencies'), refs(schema, schemas));
+      card.append(title, metadata(schema, {includeStatus: false}), actions);
+      const dependencyRefs = schema.refs.filter(ref => isExternalDocumentRef(ref, schema.id));
+      if (dependencyRefs.length) card.append(element('h4', '$ref dependencies'), refs(schema, schemas, dependencyRefs));
       overview.append(card);
     }
     const canonicalCount = schemas.filter(s => s.status !== 'proposed').length;
