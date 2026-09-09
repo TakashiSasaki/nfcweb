@@ -38,6 +38,9 @@ The documentation worker uses a cache per revision and build time. It bypasses H
 cache, serves content network-first, and uses only its current Cache Storage cache
 as an offline fallback. `site-version.json` is network-only and never cached. Unique
 verification queries also protect first-time migration through the old worker.
+Generated HTML and every static module import use deployment-specific asset URLs,
+so an old worker cannot combine new HTML with an HTTP-cached old module interface.
+The shell cache precaches these same versioned JavaScript and CSS URLs for offline use.
 Installation refreshes the shell before skipWaiting; activation removes only old
 `nfcweb-pages-` caches and claims clients. Registration uses `updateViaCache: none`.
 

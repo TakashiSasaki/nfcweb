@@ -31,6 +31,7 @@ export async function build(root = process.cwd(), options = {}) {
   const builtAt = new Date(options.builtAt ?? Date.now()).toISOString();
   if (!/^(?:[a-f0-9]{40}|local)$/.test(revision)) throw Error('Invalid build revision');
   const identity = {revision, builtAt};
+  const assetVersion = encodeURIComponent(`${revision}-${builtAt}`);
   const canonicalSource = join(root, 'src/data-format/schemas');
   const proposedV2Source = join(root, 'src/data-format/proposals/v2-alpha.1/schemas');
   const canonical = await readSchemaSet(canonicalSource, file => ({
@@ -57,6 +58,10 @@ export async function build(root = process.cwd(), options = {}) {
   for (const file of ['index.html', 'schema.html', 'source.html', 'schema.css', 'schema-tabs.js', 'schema-core.js', 'schema-browser.js', 'source-browser.js', 'service-worker.js', 'service-worker-register.js', 'documentation-freshness.js']) {
     let content = await readFile(join(root, 'docs', file), 'utf8');
     content = content.replaceAll('__BUILD_REVISION__', revision).replaceAll('__BUILT_AT__', builtAt);
+    // Old workers may still use the HTTP cache. Version the entire module graph,
+    // not just the entry point, so new HTML cannot import an old module interface.
+    if (file.endsWith('.html')) content = content.replace(/((?:src|href)="[^"?]+\.(?:js|css))"/g, `$1?build=${assetVersion}"`);
+    if (file.endsWith('.js')) content = content.replace(/((?:from\s+|import\s*)['"]\.\/[^'"?]+\.js)(['"])/g, `$1?build=${assetVersion}$2`);
     await writeFile(join(site, file), content);
   }
   for (const file of canonical.files) await cp(join(canonicalSource, file), join(site, 'schemas/source', file));

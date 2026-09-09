@@ -7,7 +7,11 @@ const SHELL_PATHS = [
   'service-worker-register.js', 'documentation-freshness.js', 'schema-manifest.json'
 ];
 const scopeURL = new URL(self.registration.scope);
-const scopedURL = path => new URL(path, scopeURL).href;
+const scopedURL = path => {
+  const url = new URL(path, scopeURL);
+  if (/\.(?:js|css)$/.test(path)) url.searchParams.set('build', `${BUILD.revision}-${BUILD.builtAt}`);
+  return url.href;
+};
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
