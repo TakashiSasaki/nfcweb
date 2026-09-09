@@ -2,18 +2,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://nfcweb.ai.studio/schemas/byte-sequence/v1",
   "title": "ByteSequenceV1",
-  "description": "Proposed representation of an arbitrary finite byte sequence, with optional embedded bytes, external locations, digests, and external content identifiers. This schema is not yet canonical.",
+  "description": "Proposed representation of one logical arbitrary finite byte sequence, with optional embedded bytes, external locations, digests, external content identifiers, or a fragmented storage representation. Storage representations describe ways to materialize the same logical byte sequence; byteLength and digests always describe the complete byte sequence represented by this object. This schema is not yet canonical.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "byteLength": {
       "type": "integer",
       "minimum": 0,
-      "description": "Length of the raw byte sequence when known."
+      "description": "Length of the complete raw byte sequence represented by this object when known. Required when fragmented is present."
     },
     "digests": {
       "type": "array",
-      "description": "Fingerprints computed directly over the raw byte sequence.",
+      "description": "Fingerprints computed directly over the complete raw byte sequence represented by this object.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -34,7 +34,7 @@
     },
     "identifiers": {
       "type": "array",
-      "description": "External content identifiers such as ni: or swh: URIs. These are distinct from raw-byte digests because an external identifier scheme may define its own framing or semantics.",
+      "description": "External content identifiers such as ni: or swh: URIs for the byte sequence represented by this object. These are distinct from raw-byte digests because an external identifier scheme may define its own framing or semantics.",
       "items": {
         "type": "string",
         "format": "uri"
@@ -52,23 +52,50 @@
         "data": {
           "type": "string",
           "contentEncoding": "base64",
-          "description": "The raw byte sequence embedded in the JSON document."
+          "description": "The complete raw byte sequence represented by this object, embedded in the JSON document."
         }
       }
     },
     "locations": {
       "type": "array",
-      "description": "URI-references from which the same byte sequence may be retrieved.",
+      "description": "URI-references from which the complete byte sequence represented by this object may be retrieved.",
       "items": {
         "type": "string",
         "format": "uri-reference"
       }
+    },
+    "fragmented": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fragments"],
+      "description": "A storage representation in which this logical byte sequence is assembled from positioned fragments. Semantically, the fragments must cover exactly the half-open interval [0, byteLength) with no gaps or overlaps, and each fragment's bytes must match the corresponding range of the whole sequence. JSON Schema validates the representation structure and required lengths; coverage, overlap, ordering-independent assembly, and digest equality require semantic/content validation.",
+      "properties": {
+        "fragments": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Fragments of the logical byte sequence. Array order is not semantically significant; offset determines placement.",
+          "items": {
+            "$ref": "https://nfcweb.ai.studio/schemas/byte-sequence-fragment/v1"
+          }
+        }
+      }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "required": ["fragmented"]
+      },
+      "then": {
+        "required": ["byteLength"]
+      }
+    }
+  ],
   "anyOf": [
     {"required": ["embedded"]},
     {"required": ["locations"]},
     {"required": ["digests"]},
-    {"required": ["identifiers"]}
+    {"required": ["identifiers"]},
+    {"required": ["fragmented"]}
   ]
 }
