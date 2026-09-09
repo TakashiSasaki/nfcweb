@@ -10,6 +10,7 @@
   </style>
   <link rel="stylesheet" href="schema.css">
   <script type="module" src="schema-browser.js"></script>
+  <script type="module" src="schema-tabs.js"></script>
 </head>
 <body>
 <main class="page">
@@ -17,14 +18,16 @@
     <span class="badge">NFCWeb schema documentation</span>
     <h1>Data Schema Overview</h1>
     <p class="lead">NFCWeb の canonical JSON Schema と、その発展案を俯瞰する静的ドキュメントです。現在の v1 schema を authority として示し、画像・任意バイト列・大容量 byte sequence の fragmented storage を扱う v2-alpha.1 設計案は明確に区別して掲載します。</p>
-    <div class="notice"><strong>Authority:</strong> 現在の canonical source of truth は <code>src/data-format/schemas/*.schema.json</code> です。v2-alpha.1 design の schema 文書は <code>src/data-format/proposals/v2-alpha.1/schemas/</code> に proposal として分離し、同じ viewer で閲覧できるよう公開します。</div>
+
   </header>
 
-  <section>
-    <h2>Schema browser</h2><p id="status" role="status">Loading schemas…</p><div id="schema-list" class="grid"></div><noscript>JavaScript を有効にするか、<a href="schema-manifest.json">manifest</a>をご覧ください。</noscript></section>
+  <section id="schemas">
+    <h2>Schema Browser</h2><p id="status" role="status">Loading schemas…</p><div id="schema-list" class="grid"></div><noscript>JavaScript を有効にするか、<a href="schema-manifest.json">manifest</a>をご覧ください。</noscript></section>
 
-  <section>
-    <h2>Proposed schema architecture — v2-alpha.1 design</h2>
+  <section id="architecture">
+    <h2>Schema Architecture</h2>
+    <div class="notice"><strong>Authority:</strong> 現在の canonical source of truth は <code>src/data-format/schemas/*.schema.json</code> です。v2-alpha.1 の提案は <code>src/data-format/proposals/v2-alpha.1/schemas/</code> に分離しています。</div>
+    <h3>Proposed schema architecture — v2-alpha.1 design</h3>
     <p class="small">以下は複数写真、多様な画像形式、usage metadata と technical representation の分離、inline bytes、URI locations、複数 digest / external identifier、および fragmented storage を扱うために検討中の設計で、まだ canonical v1 ではありません。ダイアグラム内のスキーマ名をクリックすると、整形された JSON Schema viewer を開きます。</p>
     <div class="diagram">
       <svg viewBox="0 0 1050 825" role="img" aria-labelledby="t d">
@@ -38,24 +41,8 @@
         <g fill="var(--text)" text-anchor="middle"><a class="schema-link" href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fnfc-tag-registry%2Fv2" aria-label="NfcTagRegistryV2 schema を表示"><text x="525" y="54" font-size="17" font-weight="700">NfcTagRegistryV2</text></a><a class="schema-link" href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fnfc-tag%2Fv2" aria-label="NfcTagV2 schema を表示"><text x="525" y="149" font-size="17" font-weight="700">NfcTagV2</text></a><text x="525" y="174" font-size="12">uid · NDEF · photos[]</text><a class="schema-link" href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Ftag-photo%2Fv1" aria-label="TagPhotoV1 schema を表示"><text x="260" y="317" font-size="17" font-weight="700">TagPhotoV1</text></a><text x="260" y="339" font-size="12">assetId · purpose · caption</text><a class="schema-link" href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fimage-asset%2Fv1" aria-label="ImageAssetV1 schema を表示"><text x="790" y="317" font-size="17" font-weight="700">ImageAssetV1</text></a><text x="790" y="339" font-size="12">logical image</text><a class="schema-link" href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fimage-representation-use%2Fv1" aria-label="ImageRepresentationUseV1 schema を表示"><text x="790" y="447" font-size="16" font-weight="700">ImageRepresentationUseV1</text></a><text x="790" y="470" font-size="12">purpose · representation</text><a class="schema-link" href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fimage-representation%2Fv1" aria-label="ImageRepresentationV1 schema を表示"><text x="790" y="557" font-size="17" font-weight="700">ImageRepresentationV1</text></a><text x="790" y="580" font-size="12">mediaType · width · height · content</text><a class="schema-link" href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fbyte-sequence-fragment%2Fv1" aria-label="ByteSequenceFragmentV1 schema を表示"><text x="475" y="682" font-size="16" font-weight="700">ByteSequenceFragmentV1</text></a><text x="475" y="704" font-size="12">offset · content</text><a class="schema-link" href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fbyte-sequence%2Fv1" aria-label="ByteSequenceV1 schema を表示"><text x="790" y="682" font-size="17" font-weight="700">ByteSequenceV1</text></a><text x="790" y="704" font-size="12">one logical finite byte sequence</text><text x="565" y="810" font-size="15" font-weight="700">Identity / digest</text><text x="925" y="810" font-size="15" font-weight="700">Storage / location</text></g>
       </svg>
     </div>
-  </section>
-
-  <section>
-    <h2>Proposed responsibilities</h2>
-    <div class="tablewrap"><table><thead><tr><th>Schema</th><th>Responsibility</th><th>Main relationship</th></tr></thead><tbody>
-      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fnfc-tag-registry%2Fv2"><code>NfcTagRegistryV2</code></a></td><td>NFC tag と画像 asset をまとめる交換用 registry</td><td><code>tags[] / assets[]</code></td></tr>
-      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fnfc-tag%2Fv2"><code>NfcTagV2</code></a></td><td>NFC tag の論理情報</td><td><code>photos[] → TagPhotoV1</code></td></tr>
-      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Ftag-photo%2Fv1"><code>TagPhotoV1</code></a></td><td>タグにとって論理画像が何を意味するか</td><td><code>assetId → ImageAssetV1</code></td></tr>
-      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fimage-asset%2Fv1"><code>ImageAssetV1</code></a></td><td>1枚の論理画像</td><td><code>representations[] → ImageRepresentationUseV1</code></td></tr>
-      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fimage-representation-use%2Fv1"><code>ImageRepresentationUseV1</code></a></td><td>asset 内で technical representation をどの用途に使うかという contextual metadata</td><td><code>purpose + representation → ImageRepresentationV1</code></td></tr>
-      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fimage-representation%2Fv1"><code>ImageRepresentationV1</code></a></td><td>具体的な encoded image の intrinsic technical metadata</td><td><code>mediaType / dimensions / content → ByteSequenceV1</code></td></tr>
-      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fbyte-sequence%2Fv1"><code>ByteSequenceV1</code></a></td><td>画像に依存しない1本の論理的な有限バイト列</td><td>digest / identifier / embedded / location / fragmented</td></tr>
-      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fbyte-sequence-fragment%2Fv1"><code>ByteSequenceFragmentV1</code></a></td><td>親 ByteSequence 内に配置される fragment</td><td><code>offset + content → ByteSequenceV1</code></td></tr>
-    </tbody></table></div>
     <div class="notice"><strong>Metadata axes:</strong> <code>display</code> / <code>thumbnail</code> は <code>ImageRepresentationUseV1.purpose</code> が表す usage context です。<code>original</code> / <code>derived</code> は provenance / derivation の別軸なので、この <code>purpose</code> には混在させません。また <code>TagPhotoV1.purpose</code> は「タグにとって論理画像が何を意味するか」を表し、representation-level purpose とは scope が異なります。</div>
-  </section>
 
-  <section>
     <h2>ByteSequence model</h2>
     <div class="grid">
       <article class="card"><h3>Digests</h3><p>その <code>ByteSequenceV1</code> が表す生 bytes 全体に直接適用した複数の fingerprint。親では whole sequence、fragment の <code>content</code> では fragment bytes だけを対象にします。</p></article>
@@ -68,6 +55,22 @@
       <article class="card"><h3>Recursive representation</h3><p><code>ByteSequenceFragmentV1.content</code> は再び <code>ByteSequenceV1</code> なので、大きな fragment をさらに分割する多段 fragmented storage も表現できます。</p></article>
       <article class="card"><h3>Thumbnail</h3><p><code>thumbnail</code> は storage format ではなく <code>ImageRepresentationUseV1.purpose</code> の usage metadata です。実体の <code>mediaType</code> / dimensions は <code>ImageRepresentationV1</code>、inline・外部化・fragmented の選択は <code>ByteSequenceV1</code> の責務です。</p></article>
     </div>
+
+  </section>
+
+  <section id="responsibilities">
+    <h2>Responsibilities</h2>
+    <div class="tablewrap"><table><thead><tr><th>Schema</th><th>Responsibility</th><th>Main relationship</th></tr></thead><tbody>
+      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fnfc-tag-registry%2Fv2"><code>NfcTagRegistryV2</code></a></td><td>NFC tag と画像 asset をまとめる交換用 registry</td><td><code>tags[] / assets[]</code></td></tr>
+      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fnfc-tag%2Fv2"><code>NfcTagV2</code></a></td><td>NFC tag の論理情報</td><td><code>photos[] → TagPhotoV1</code></td></tr>
+      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Ftag-photo%2Fv1"><code>TagPhotoV1</code></a></td><td>タグにとって論理画像が何を意味するか</td><td><code>assetId → ImageAssetV1</code></td></tr>
+      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fimage-asset%2Fv1"><code>ImageAssetV1</code></a></td><td>1枚の論理画像</td><td><code>representations[] → ImageRepresentationUseV1</code></td></tr>
+      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fimage-representation-use%2Fv1"><code>ImageRepresentationUseV1</code></a></td><td>asset 内で technical representation をどの用途に使うかという contextual metadata</td><td><code>purpose + representation → ImageRepresentationV1</code></td></tr>
+      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fimage-representation%2Fv1"><code>ImageRepresentationV1</code></a></td><td>具体的な encoded image の intrinsic technical metadata</td><td><code>mediaType / dimensions / content → ByteSequenceV1</code></td></tr>
+      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fbyte-sequence%2Fv1"><code>ByteSequenceV1</code></a></td><td>画像に依存しない1本の論理的な有限バイト列</td><td>digest / identifier / embedded / location / fragmented</td></tr>
+      <tr><td><a href="schema.html?id=https%3A%2F%2Fnfcweb.ai.studio%2Fschemas%2Fbyte-sequence-fragment%2Fv1"><code>ByteSequenceFragmentV1</code></a></td><td>親 ByteSequence 内に配置される fragment</td><td><code>offset + content → ByteSequenceV1</code></td></tr>
+    </tbody></table></div>
+
   </section>
 
   <footer>GitHub Pages publishes this documentation from <code>docs/</code>. Canonical schemas and proposed v2-alpha.1 schema documents are published from their separate repository source locations.</footer>

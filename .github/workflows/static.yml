@@ -47,7 +47,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Test schema browser and publication builder
-        run: bunx vitest run tests/schema-docs.test.mjs
+        run: bunx vitest run tests/schema-docs.test.mjs tests/schema-browser-overview.test.mjs tests/schema-overview-image-representation.test.mjs tests/schema-tabs.test.mjs
 
       - name: Assemble schema documentation site
         run: node scripts/build-schema-docs.mjs

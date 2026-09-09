@@ -7,6 +7,7 @@ const SHELL_PATHS = [
   'source.html',
   'schema.css',
   'schema-core.js',
+  'schema-tabs.js',
   'schema-browser.js',
   'source-browser.js',
   'service-worker-register.js',

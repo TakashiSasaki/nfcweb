@@ -144,7 +144,7 @@ test('artifact includes canonical and proposed schemas byte-for-byte with unchan
       assert.equal(url.searchParams.get('id'), entry.id);
     }
   }
-  assert.deepEqual((await readdir('_site')).sort(), ['.nojekyll','index.html','schema-browser.js','schema-core.js','schema-manifest.json','schema.css','schema.html','schemas','service-worker-register.js','service-worker.js','source-browser.js','source.html'].sort());
+  assert.deepEqual((await readdir('_site')).sort(), ['.nojekyll','index.html','schema-browser.js','schema-tabs.js', 'schema-core.js','schema-manifest.json','schema.css','schema.html','schemas','service-worker-register.js','service-worker.js','source-browser.js','source.html'].sort());
 });
 test('overview and schema viewer expose source navigation; source viewer exposes provenance and status', async () => {
   const schemaBrowser = await readFile('docs/schema-browser.js', 'utf8');
