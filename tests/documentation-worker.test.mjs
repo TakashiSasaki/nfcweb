@@ -23,6 +23,10 @@ test('install uses deployment cache and bypassed shell requests, then activates 
   expect(f.caches.open.mock.calls[0][0]).toBe(`nfcweb-pages-${'a'.repeat(40)}-2026-09-09T01:00:00.000Z`);
   const requests=f.cache.addAll.mock.calls[0][0];
   expect(requests.every(r => r.cache === 'reload')).toBe(true);
+  for (const request of requests) {
+    const url = new URL(request.url);
+    if (/\.(?:js|css)$/.test(url.pathname)) expect(url.searchParams.get('build')).toBe(`${'a'.repeat(40)}-2026-09-09T01:00:00.000Z`);
+  }
   expect(requests.some(r => r.url.includes('site-version.json'))).toBe(false);
   expect(f.self.skipWaiting).toHaveBeenCalledOnce();
   await f.lifecycle('activate');

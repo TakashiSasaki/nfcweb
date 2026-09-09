@@ -1,5 +1,5 @@
 import {test, assert, expect} from 'vitest';
-import {readFile, readdir} from 'node:fs/promises';
+import {readFile, readdir, writeFile} from 'node:fs/promises';
 import {viewerURL, sourceURL, resolveRef, jsonLines, renderJSON, sourceTokens, renderSourceJSON, fragmentTarget} from '../docs/schema-core.js';
 import {manifestEntry, build} from '../scripts/build-schema-docs.mjs';
 import {checkArtifact} from '../scripts/check-schema-docs-artifact.mjs';
@@ -114,6 +114,11 @@ test('artifact includes canonical and proposed schemas byte-for-byte with unchan
   const identity = {revision:'a'.repeat(40), builtAt:'2026-09-09T01:00:00.000Z'};
   await build(process.cwd(), identity);
   assert.deepEqual(await checkArtifact(), identity);
+  const freshModule = await readFile('_site/documentation-freshness.js', 'utf8');
+  assert.ok(freshModule.includes(`service-worker-register.js?build=${encodeURIComponent(`${identity.revision}-${identity.builtAt}`)}`));
+  await writeFile('_site/documentation-freshness.js', freshModule.replace(/\?build=[^']+/, ''));
+  await expect(checkArtifact()).rejects.toThrow('asset identity mismatch');
+  await writeFile('_site/documentation-freshness.js', freshModule);
   const {schemas} = JSON.parse(await readFile('_site/schema-manifest.json', 'utf8'));
   const canonicalFiles = (await readdir('src/data-format/schemas')).filter(f => f.endsWith('.json')).sort();
   const proposedFiles = (await readdir('src/data-format/proposals/v2-alpha.1/schemas')).filter(f => f.endsWith('.json')).sort();
