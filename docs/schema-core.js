@@ -23,6 +23,15 @@ export function resolveRef(ref, scope, schemas, base) {
   } catch { /* Invalid or unsafe URI remains text. */ }
   return {kind: 'text'};
 }
+export function isExternalDocumentRef(ref, scope) {
+  try {
+    const target = new URL(ref, scope);
+    const source = new URL(scope);
+    target.hash = '';
+    source.hash = '';
+    return target.href !== source.href;
+  } catch { return false; }
+}
 export function jsonLines(value, pointer = '', scope = '', depth = 0) {
   const rows = [];
   function visit(value, pointer, scope, depth, key, comma) {
