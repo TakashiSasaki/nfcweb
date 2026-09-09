@@ -12,6 +12,48 @@ Install the repository dependencies with `bun install --frozen-lockfile`, run
 including at a project prefix such as `/nfcweb/`. Opening the HTML directly from disk
 is not supported because the browser fetches publication metadata and JSON.
 
+The overview has three tabs: Schema Browser (`#schemas`, the default), Schema
+Architecture (`#architecture`), and Responsibilities (`#responsibilities`). Direct
+links, reload, browser history, arrow keys, Home and End retain accessible selection.
+Without JavaScript, explanatory sections remain visible and the manifest is linked.
+Overview cards omit redundant Status rows and same-document dependencies; badges
+and full individual-viewer metadata are retained.
+
+## Deployment freshness
+
+Pages passes `GITHUB_SHA` to the builder. Each build creates `site-version.json`
+with a full revision and UTC `builtAt`; the same identity appears in all three HTML
+pages and the service worker. Rebuilding the same commit creates a distinct identity.
+Run `node scripts/check-schema-docs-artifact.mjs` before publishing `_site/`.
+Local builds use revision `local` and do not register a documentation worker.
+
+The common indicator displays the **currently viewed** revision and relative build
+age, with absolute build time and verification time in its tooltip. Build time is
+not deployment-completion time. Only a successful network identity match displays
+“最新版”. Network/HTTP/metadata failures display “Offline copy · 最新版を確認できません”.
+Initial load, online recovery, returning to a visible tab, and five-minute visible
+checks verify freshness. Relative age updates every minute.
+
+The documentation worker uses a cache per revision and build time. It bypasses HTTP
+cache, serves content network-first, and uses only its current Cache Storage cache
+as an offline fallback. `site-version.json` is network-only and never cached. Unique
+verification queries also protect first-time migration through the old worker.
+Installation refreshes the shell before skipWaiting; activation removes only old
+`nfcweb-pages-` caches and claims clients. Registration uses `updateViaCache: none`.
+
+On identity mismatch, one automatic reload per tab session is allowed after the
+expected worker is active. The attempt is stored before recovery; storage denial,
+worker-update failure, or continuing mismatch leaves a manual reload warning.
+No controllerchange reload handler is used. Worker registration and automatic reload
+are disabled in iframes, insecure contexts and local/unbuilt documentation. The
+application's Vite PWA configuration and data storage are unaffected.
+
+Regression tests cover tabs, freshness states, bounded recovery, worker behavior,
+and artifact identity. Full repository validation is `bun run check`; the Pages
+workflow runs the documentation suites and the artifact checker before upload.
+
+## Published schema content
+
 The builder discovers canonical and proposed JSON files from their separate authority
 paths, inspects identifiers, rejects duplicate IDs, copies raw files byte-for-byte,
 and creates `schema-manifest.json`. Each manifest entry contains schema identity and

@@ -26,7 +26,11 @@ async function readSchemaSet(source, optionsForFile) {
   return {files, schemas};
 }
 
-export async function build(root = process.cwd()) {
+export async function build(root = process.cwd(), options = {}) {
+  const revision = options.revision ?? process.env.GITHUB_SHA ?? 'local';
+  const builtAt = new Date(options.builtAt ?? Date.now()).toISOString();
+  if (!/^(?:[a-f0-9]{40}|local)$/.test(revision)) throw Error('Invalid build revision');
+  const identity = {revision, builtAt};
   const canonicalSource = join(root, 'src/data-format/schemas');
   const proposedV2Source = join(root, 'src/data-format/proposals/v2-alpha.1/schemas');
   const canonical = await readSchemaSet(canonicalSource, file => ({
@@ -50,13 +54,16 @@ export async function build(root = process.cwd()) {
   await mkdir(join(site, 'schemas/proposed/v2-alpha.1'), {recursive: true});
 
   // Explicit allowlist: never publish unrelated repository contents or test fixtures.
-  for (const file of ['index.html', 'schema.html', 'source.html', 'schema.css', 'schema-tabs.js', 'schema-core.js', 'schema-browser.js', 'source-browser.js', 'service-worker.js', 'service-worker-register.js']) {
-    await cp(join(root, 'docs', file), join(site, file));
+  for (const file of ['index.html', 'schema.html', 'source.html', 'schema.css', 'schema-tabs.js', 'schema-core.js', 'schema-browser.js', 'source-browser.js', 'service-worker.js', 'service-worker-register.js', 'documentation-freshness.js']) {
+    let content = await readFile(join(root, 'docs', file), 'utf8');
+    content = content.replaceAll('__BUILD_REVISION__', revision).replaceAll('__BUILT_AT__', builtAt);
+    await writeFile(join(site, file), content);
   }
   for (const file of canonical.files) await cp(join(canonicalSource, file), join(site, 'schemas/source', file));
   for (const file of proposed.files) await cp(join(proposedV2Source, file), join(site, 'schemas/proposed/v2-alpha.1', file));
   await cp(join(root, 'src/data-format/generated/bundles'), join(site, 'schemas/bundles'), {recursive: true});
   await writeFile(join(site, 'schema-manifest.json'), JSON.stringify({schemas}, null, 2) + '\n');
+  await writeFile(join(site, 'site-version.json'), JSON.stringify(identity, null, 2) + '\n');
   await writeFile(join(site, '.nojekyll'), '');
   console.log(`Published ${canonical.schemas.length} canonical and ${proposed.schemas.length} proposed schema documents into _site`);
 }

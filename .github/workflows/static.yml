@@ -6,7 +6,9 @@ on:
     paths:
       - "docs/**"
       - "scripts/build-schema-docs.mjs"
-      - "tests/schema-docs.test.mjs"
+      - "scripts/check-schema-docs-artifact.mjs"
+      - "tests/schema-*.test.mjs"
+      - "tests/documentation-*.test.mjs"
       - "src/data-format/schemas/**"
       - "src/data-format/proposals/v2-alpha.1/schemas/**"
       - "src/data-format/generated/bundles/**"
@@ -47,10 +49,15 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Test schema browser and publication builder
-        run: bunx vitest run tests/schema-docs.test.mjs tests/schema-browser-overview.test.mjs tests/schema-overview-image-representation.test.mjs tests/schema-tabs.test.mjs
+        run: bunx vitest run tests/schema-docs.test.mjs tests/schema-browser-overview.test.mjs tests/schema-overview-image-representation.test.mjs tests/schema-tabs.test.mjs tests/documentation-freshness.test.mjs tests/documentation-worker.test.mjs
 
       - name: Assemble schema documentation site
         run: node scripts/build-schema-docs.mjs
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+
+      - name: Verify Pages artifact identity
+        run: node scripts/check-schema-docs-artifact.mjs
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

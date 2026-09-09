@@ -97,4 +97,6 @@
 ## 現在の進捗
 
 - 完了: 最新mainのpull、PR #8/#9の状態確認、builder・UI・SW・Pages workflow・既存テストの調査、実装計画の作成。
-- Phase 1実装済み: #8にmainを統合、3タブ・履歴・キーボード対応を追加。ローカル165テストと型検査・ビルドを実行。PR CI・mergeとPhase 2はこれから。
+- Phase 1完了: PR #8をmainへmerge（8046760）。GitHub CIとPages deploymentが成功。
+- Phase 2実装・ローカル検証済み: 全179テスト、型検査、productionビルド、artifact identity検査が成功。ブラウザで最新版・時刻・revision表示を確認。
+- 残り: Phase 2のPR CI・merge・Pages deploymentと公開受け入れ。
