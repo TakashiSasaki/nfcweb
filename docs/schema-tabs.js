@@ -16,13 +16,13 @@ export function initializeTabs(document, window) {
     panel.setAttribute('role', 'tabpanel');
     panel.setAttribute('aria-labelledby', button.id);
     panel.tabIndex = 0;
-    button.addEventListener('click', () => { window.location.hash = ids[index]; select(); });
+    button.addEventListener('click', () => { window.location.hash = ids[index]; select(); button.focus(); });
     button.addEventListener('keydown', event => {
       const target = {ArrowRight: (index + 1) % 3, ArrowLeft: (index + 2) % 3, Home: 0, End: 2}[event.key];
       if (target === undefined) return;
       event.preventDefault();
-      buttons[target].focus();
       buttons[target].click();
+      buttons[target].focus();
     });
     list.append(button);
     return button;
