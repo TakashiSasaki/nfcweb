@@ -8,6 +8,7 @@ const proposedFilesExpected = [
   'byte-sequence-fragment.schema.json',
   'byte-sequence.schema.json',
   'image-asset.schema.json',
+  'image-representation-use.schema.json',
   'image-representation.schema.json',
   'nfc-tag-registry.schema.json',
   'nfc-tag.schema.json',
@@ -92,6 +93,21 @@ test('fragmented ByteSequence proposal composes fragment placement without dupli
   for (const duplicate of ['totalByteLength', 'wholeByteLength', 'totalDigests', 'wholeDigests']) {
     assert.equal(fragment.properties[duplicate], undefined, `${duplicate} must stay on the parent ByteSequenceV1`);
   }
+});
+test('image representation proposal separates technical metadata from usage semantics', async () => {
+  const asset = JSON.parse(await readFile('src/data-format/proposals/v2-alpha.1/schemas/image-asset.schema.json', 'utf8'));
+  const use = JSON.parse(await readFile('src/data-format/proposals/v2-alpha.1/schemas/image-representation-use.schema.json', 'utf8'));
+  const representation = JSON.parse(await readFile('src/data-format/proposals/v2-alpha.1/schemas/image-representation.schema.json', 'utf8'));
+  assert.equal(asset.properties.representations.items.$ref, use.$id);
+  assert.deepEqual(use.required, ['purpose', 'representation']);
+  assert.equal(use.properties.representation.$ref, representation.$id);
+  assert.equal(representation.properties.role, undefined);
+  assert.deepEqual(representation.required, ['mediaType', 'content']);
+  for (const property of ['mediaType', 'width', 'height', 'content']) assert.ok(representation.properties[property], property);
+  assert.ok(use.properties.purpose.description.includes('display'));
+  assert.ok(use.properties.purpose.description.includes('thumbnail'));
+  assert.ok(!use.properties.purpose.description.includes('original'));
+  assert.ok(use.description.toLowerCase().includes('provenance'));
 });
 test('artifact includes canonical and proposed schemas byte-for-byte with unchanged ids and provenance', async () => {
   await build();
