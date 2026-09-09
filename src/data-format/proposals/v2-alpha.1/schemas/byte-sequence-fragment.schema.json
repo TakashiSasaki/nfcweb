@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nfcweb.ai.studio/schemas/byte-sequence-fragment/v1",
+  "title": "ByteSequenceFragmentV1",
+  "description": "Proposed placement of one fragment within a parent ByteSequenceV1 fragmented representation. The fragment does not duplicate whole-sequence metadata: offset is relative to the parent, while content is a ByteSequenceV1 whose byteLength and digests describe only the fragment bytes. This schema is not yet canonical.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["offset", "content"],
+  "properties": {
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Zero-based byte offset of the fragment within the parent logical byte sequence."
+    },
+    "content": {
+      "description": "The byte sequence occupying this fragment. byteLength is required here and is the fragment length; digests, when present, are computed over only these fragment bytes. The fragment content may itself use any ByteSequenceV1 representation, including further fragmentation.",
+      "allOf": [
+        {
+          "$ref": "https://nfcweb.ai.studio/schemas/byte-sequence/v1"
+        },
+        {
+          "required": ["byteLength"]
+        }
+      ]
+    }
+  }
+}

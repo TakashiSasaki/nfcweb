@@ -5,6 +5,7 @@ import {manifestEntry, build} from '../scripts/build-schema-docs.mjs';
 const id = 'https://nfcweb.ai.studio/schemas/example/v1';
 const schemas = [{id}];
 const proposedFilesExpected = [
+  'byte-sequence-fragment.schema.json',
   'byte-sequence.schema.json',
   'image-asset.schema.json',
   'image-representation.schema.json',
@@ -79,6 +80,18 @@ test('manifest derives identity and records repository source provenance', () =>
   assert.deepEqual(entry.refs, [id + '#foo']);
   assert.throws(() => manifestEntry({title:'No ID'}, 'x.json'));
   assert.throws(() => manifestEntry({$id:'javascript:x', title:'Bad'}, 'x.json'));
+});
+test('fragmented ByteSequence proposal composes fragment placement without duplicating whole metadata', async () => {
+  const whole = JSON.parse(await readFile('src/data-format/proposals/v2-alpha.1/schemas/byte-sequence.schema.json', 'utf8'));
+  const fragment = JSON.parse(await readFile('src/data-format/proposals/v2-alpha.1/schemas/byte-sequence-fragment.schema.json', 'utf8'));
+  assert.equal(whole.properties.fragmented.properties.fragments.items.$ref, fragment.$id);
+  assert.deepEqual(whole.allOf[0].then.required, ['byteLength']);
+  assert.equal(fragment.properties.content.allOf[0].$ref, whole.$id);
+  assert.deepEqual(fragment.properties.content.allOf[1].required, ['byteLength']);
+  assert.deepEqual(fragment.required, ['offset', 'content']);
+  for (const duplicate of ['totalByteLength', 'wholeByteLength', 'totalDigests', 'wholeDigests']) {
+    assert.equal(fragment.properties[duplicate], undefined, `${duplicate} must stay on the parent ByteSequenceV1`);
+  }
 });
 test('artifact includes canonical and proposed schemas byte-for-byte with unchanged ids and provenance', async () => {
   await build();
