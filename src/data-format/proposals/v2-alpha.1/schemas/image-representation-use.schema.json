@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nfcweb.ai.studio/schemas/image-representation-use/v1",
+  "title": "ImageRepresentationUseV1",
+  "description": "Proposed asset-scoped association between an intended usage and one technical ImageRepresentationV1. Usage semantics are contextual metadata and are deliberately kept outside ImageRepresentationV1. Provenance such as original or derived is a separate concern and is not represented by purpose. This schema is not yet canonical.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["purpose", "representation"],
+  "properties": {
+    "purpose": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Application-defined intended use of this representation within the asset, for example display or thumbnail. This describes usage context, not provenance."
+    },
+    "representation": {
+      "$ref": "https://nfcweb.ai.studio/schemas/image-representation/v1"
+    }
+  }
+}

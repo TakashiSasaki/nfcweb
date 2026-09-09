@@ -2,16 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://nfcweb.ai.studio/schemas/image-representation/v1",
   "title": "ImageRepresentationV1",
-  "description": "Proposed concrete encoding of an ImageAssetV1, such as an original, display-sized image, or thumbnail. This schema is not yet canonical.",
+  "description": "Proposed concrete encoded representation of an image, containing only intrinsic technical metadata for that encoded form. Contextual usage semantics such as display or thumbnail belong to ImageRepresentationUseV1, while provenance such as original or derived is intentionally a separate concern. This schema is not yet canonical.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["role", "mediaType", "content"],
+  "required": ["mediaType", "content"],
   "properties": {
-    "role": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Application-defined representation role such as original, display, or thumbnail."
-    },
     "mediaType": {
       "type": "string",
       "minLength": 1,
@@ -20,12 +15,12 @@
     "width": {
       "type": "integer",
       "minimum": 1,
-      "description": "Pixel width when known."
+      "description": "Pixel width of this encoded image representation when known."
     },
     "height": {
       "type": "integer",
       "minimum": 1,
-      "description": "Pixel height when known."
+      "description": "Pixel height of this encoded image representation when known."
     },
     "content": {
       "$ref": "https://nfcweb.ai.studio/schemas/byte-sequence/v1"
