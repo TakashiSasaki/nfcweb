@@ -12,6 +12,6 @@ test('schema overview separates representation usage, technical metadata, and pr
   assert.match(html, /original<\/code> \/ <code>derived/);
   assert.match(html, /provenance \/ derivation/);
   assert.match(html, /TagPhotoV1\.purpose/);
-  assert.doesNotMatch(html, /ImageRepresentation\.role/);
-  assert.doesNotMatch(html, />role · mediaType · dimensions</);
+  assert.equal(/ImageRepresentation\.role/.test(html), false);
+  assert.equal(/>role · mediaType · dimensions/.test(html), false);
 });
